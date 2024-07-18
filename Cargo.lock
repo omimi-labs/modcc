@@ -667,6 +667,14 @@ dependencies = [
 ]
 
 [[package]]
+name = "modcc"
+version = "0.1.0"
+dependencies = [
+ "actix-web",
+ "serde",
+]
+
+[[package]]
 name = "num-conv"
 version = "0.1.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1279,14 +1287,6 @@ dependencies = [
  "proc-macro2",
  "quote",
  "syn",
-]
-
-[[package]]
-name = "zk-calc"
-version = "0.1.0"
-dependencies = [
- "actix-web",
- "serde",
 ]
 
 [[package]]
