@@ -1,4 +1,4 @@
-use crate::ff::{FF, FFE};
+use crate::ff::{FiniteFieldElement, FFE};
 use std::marker::PhantomData;
 use std::ops::{Add, AddAssign, Mul, Neg, Sub};
 
@@ -28,19 +28,15 @@ pub trait UnivariatePolynomial<F>: Polynomial<F> {
 
 // Univariate Polynomial
 #[derive(Debug, PartialEq, Clone)]
-pub struct UniPoly<F, S> {
+pub struct UniPoly<F> {
     // Co-efficients represented from lower degree to higher
     // For example: 2x^2 + x + 1 is represented as [1, 1, 2]
     coefficients: Vec<F>,
-    _field: PhantomData<S>,
 }
 
-impl<F: FFE<S>, S: FF> Polynomial<F> for UniPoly<F, S> {
+impl<F: FiniteFieldElement> Polynomial<F> for UniPoly<F> {
     fn new(coefficients: Vec<F>) -> Self {
-        UniPoly {
-            coefficients,
-            _field: PhantomData,
-        }
+        UniPoly { coefficients }
     }
 
     fn x() -> Self {

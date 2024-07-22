@@ -1,25 +1,25 @@
-// mod ff;
-// mod uni_poly;
+mod ff;
+mod interpolation;
+mod uni_poly;
 
-use std::fmt::Debug;
+use actix_web::{get, post, web, App, HttpServer, Responder};
+use serde::Deserialize;
 
-use actix_web::{web, App, HttpResponse, HttpServer, Responder};
-use serde::{Deserialize, Serialize};
-
-struct LagrangeInput<T> {
-    x_values: Vec<T>,
-    y_values: Vec<T>,
-    field: T,
+#[derive(Debug, Deserialize)]
+struct LagrangeInput {
+    x_values: Vec<usize>,
+    y_values: Vec<usize>,
+    field: usize,
 }
 
-#[actix_web::get("/lagrange_interpolation_over_ff/{user_id}/{user_name}/")]
-async fn lagrange_interpolation_over_ff(
-    path: web::Path<(String, String)>,
-    // json: web::Json<LagrangeInput<T>>,
-) -> impl Responder {
-    let (user_id, user_name) = path.into_inner();
-    println!("{}:{}", user_id, user_name);
-    format!("{} {}", user_id, user_name)
+#[get("/lf/")]
+async fn lagrange_interpolation_over_ff(json: web::Json<LagrangeInput>) -> impl Responder {
+    let x_values = &json.x_values;
+    let y_values = &json.y_values;
+    let field = json.field;
+    // let poly = UniPoly::interpolate_xy(x_values, y_values);
+    // println!("{:?}", poly.)
+    "Lagrange View"
 }
 
 #[actix_web::main]
