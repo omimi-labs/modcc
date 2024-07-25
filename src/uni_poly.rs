@@ -1,6 +1,5 @@
-use crate::ff::{FiniteFieldElement, FFE};
-use std::marker::PhantomData;
-use std::ops::{Add, AddAssign, Mul, Neg, Sub};
+use crate::ff::FiniteFieldElement;
+use std::ops::{Add, Mul, Neg, Sub};
 
 pub trait Polynomial<F>: Sized {
     fn is_zero(&self) -> bool;
@@ -17,6 +16,8 @@ pub trait Polynomial<F>: Sized {
 }
 
 pub trait UnivariatePolynomial<F>: Polynomial<F> {
+    fn coefficients(&self) -> Vec<F>;
+
     fn evaluate(&self, x: F) -> F;
 
     fn interpolate(y_values: &Vec<F>) -> Self;
@@ -29,7 +30,7 @@ pub trait UnivariatePolynomial<F>: Polynomial<F> {
 // Univariate Polynomial
 #[derive(Debug, PartialEq, Clone)]
 pub struct UniPoly<F> {
-    // Co-efficients represented from lower degree to higher
+    // Co-efficient represented from lower degree to higher
     // For example: 2x^2 + x + 1 is represented as [1, 1, 2]
     coefficients: Vec<F>,
 }
@@ -65,9 +66,13 @@ impl<F: FiniteFieldElement> Polynomial<F> for UniPoly<F> {
     }
 }
 
-impl<F: FFE<S> + Neg<Output = F> + Sub<Output = F> + Add<Output = F>, S: FF> UnivariatePolynomial<F>
-    for UniPoly<F, S>
+impl<F: FiniteFieldElement + Neg<Output = F> + Sub<Output = F> + Add<Output = F>>
+    UnivariatePolynomial<F> for UniPoly<F>
 {
+    fn coefficients(&self) -> Vec<F> {
+        self.coefficients.clone()
+    }
+
     fn evaluate(&self, var: F) -> F {
         let mut identity = F::zero();
         for (i, x) in self.coefficients.iter().enumerate() {
@@ -80,8 +85,8 @@ impl<F: FFE<S> + Neg<Output = F> + Sub<Output = F> + Add<Output = F>, S: FF> Uni
 
     fn interpolate(y_values: &Vec<F>) -> Self {
         let mut x_values = vec![];
-        for i in 0..y_values.len() {
-            x_values.push(F::new(i.try_into().unwrap()));
+        for (i, y) in y_values.iter().enumerate() {
+            x_values.push(F::new(i.try_into().unwrap(), y.modulus()));
         }
         Self::interpolate_xy(&x_values, y_values)
     }
@@ -121,8 +126,8 @@ impl<F: FFE<S> + Neg<Output = F> + Sub<Output = F> + Add<Output = F>, S: FF> Uni
     }
 }
 
-impl<F: FFE<S> + AddAssign, S: FF> Mul for &UniPoly<F, S> {
-    type Output = UniPoly<F, S>;
+impl<F: FiniteFieldElement> Mul for &UniPoly<F> {
+    type Output = UniPoly<F>;
 
     fn mul(self, other: Self) -> Self::Output {
         if self.is_zero() || other.is_zero() {
@@ -146,8 +151,8 @@ impl<F: FFE<S> + AddAssign, S: FF> Mul for &UniPoly<F, S> {
     }
 }
 
-impl<F: FFE<S> + Add<Output = F>, S: FF> Add for &UniPoly<F, S> {
-    type Output = UniPoly<F, S>;
+impl<F: FiniteFieldElement + Add<Output = F>> Add for &UniPoly<F> {
+    type Output = UniPoly<F>;
 
     fn add(self, rhs: Self) -> Self::Output {
         if self.is_zero() {
@@ -161,7 +166,7 @@ impl<F: FFE<S> + Add<Output = F>, S: FF> Add for &UniPoly<F, S> {
     }
 }
 
-fn add_list<T: FFE<F> + Add<Output = T>, F: FF>(a: Vec<T>, b: Vec<T>) -> Vec<T> {
+fn add_list<T: FiniteFieldElement + Add<Output = T>>(a: Vec<T>, b: Vec<T>) -> Vec<T> {
     let mut res: Vec<T> = vec![];
     if a.len() == b.len() {
         for (x, y) in a.iter().zip(b.iter()) {
@@ -192,71 +197,85 @@ fn add_list<T: FFE<F> + Add<Output = T>, F: FF>(a: Vec<T>, b: Vec<T>) -> Vec<T> 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::ff::{SampleFF, SampleFFE};
+    use crate::ff::FFE;
+
+    const MODULUS: usize = 3221225473;
 
     #[test]
     fn mul() {
         // Test:
-        let x = UniPoly::<SampleFFE<SampleFF>, SampleFF>::x();
-        let co_effs = vec![SampleFFE::one(), SampleFFE::one()];
-        let x_plus_1 = UniPoly::<SampleFFE<SampleFF>, SampleFF>::new(co_effs);
+        let x = UniPoly::<FFE>::x();
+        let co_effs = vec![FFE::one(), FFE::one()];
+        let x_plus_1 = UniPoly::<FFE>::new(co_effs);
         let actual = &x * &x_plus_1;
-        let co_effs = vec![SampleFFE::zero(), SampleFFE::one(), SampleFFE::one()];
-        let expected = UniPoly::<SampleFFE<SampleFF>, SampleFF>::new(co_effs);
+        let co_effs = vec![FFE::zero(), FFE::one(), FFE::one()];
+        let expected = UniPoly::<FFE>::new(co_effs);
         assert_eq!(actual, expected);
 
         // Tests (x^3 - 3x + 2) * (2x + 5)
         let co_effs_1 = vec![
-            SampleFFE::new(2),
-            SampleFFE::new(-3),
-            SampleFFE::zero(),
-            SampleFFE::new(1),
+            FFE::new(2, MODULUS),
+            FFE::new(-3, MODULUS),
+            FFE::zero(),
+            FFE::new(1, MODULUS),
         ];
-        let poly_1 = UniPoly::<SampleFFE<SampleFF>, SampleFF>::new(co_effs_1);
-        let co_effs_2 = vec![SampleFFE::new(5), SampleFFE::new(2)];
-        let poly_2 = UniPoly::<SampleFFE<SampleFF>, SampleFF>::new(co_effs_2);
+        let poly_1 = UniPoly::<FFE>::new(co_effs_1);
+        let co_effs_2 = vec![FFE::new(5, MODULUS), FFE::new(2, MODULUS)];
+        let poly_2 = UniPoly::<FFE>::new(co_effs_2);
         let actual = &poly_1 * &poly_2;
         let exp_co_effs = vec![
-            SampleFFE::new(10),
-            SampleFFE::new(-11),
-            SampleFFE::new(-6),
-            SampleFFE::new(5),
-            SampleFFE::new(2),
+            FFE::new(10, MODULUS),
+            FFE::new(-11, MODULUS),
+            FFE::new(-6, MODULUS),
+            FFE::new(5, MODULUS),
+            FFE::new(2, MODULUS),
         ];
-        let expected = UniPoly::<SampleFFE<SampleFF>, SampleFF>::new(exp_co_effs);
+        let expected = UniPoly::<FFE>::new(exp_co_effs);
         assert_eq!(actual, expected);
     }
 
     #[test]
     fn add() {
         // Test: (x^2 + x + 5) + (2x^2 + 4x + 2)
-        let co_eff_1 = vec![SampleFFE::new(5), SampleFFE::new(1), SampleFFE::new(1)];
+        let co_eff_1 = vec![
+            FFE::new(5, MODULUS),
+            FFE::new(1, MODULUS),
+            FFE::new(1, MODULUS),
+        ];
         let poly_1 = UniPoly::new(co_eff_1);
-        let co_eff_2 = vec![SampleFFE::new(2), SampleFFE::new(4), SampleFFE::new(2)];
+        let co_eff_2 = vec![
+            FFE::new(2, MODULUS),
+            FFE::new(4, MODULUS),
+            FFE::new(2, MODULUS),
+        ];
         let poly_2 = UniPoly::new(co_eff_2);
         let actual = &poly_1 + &poly_2;
-        let exp_co_effs = vec![SampleFFE::new(7), SampleFFE::new(5), SampleFFE::new(3)];
-        let expected = UniPoly::<SampleFFE<SampleFF>, SampleFF>::new(exp_co_effs);
+        let exp_co_effs = vec![
+            FFE::new(7, MODULUS),
+            FFE::new(5, MODULUS),
+            FFE::new(3, MODULUS),
+        ];
+        let expected = UniPoly::<FFE>::new(exp_co_effs);
         assert_eq!(actual, expected);
 
         // Test: (x^3 - 3x + 2) * (2x + 5)
-        let co_eff_3 = vec![SampleFFE::new(5), SampleFFE::new(2)];
+        let co_eff_3 = vec![FFE::new(5, MODULUS), FFE::new(2, MODULUS)];
         let poly_3 = UniPoly::new(co_eff_3);
         let co_eff_4 = vec![
-            SampleFFE::new(2),
-            SampleFFE::new(-3),
-            SampleFFE::new(0),
-            SampleFFE::new(1),
+            FFE::new(2, MODULUS),
+            FFE::new(-3, MODULUS),
+            FFE::new(0, MODULUS),
+            FFE::new(1, MODULUS),
         ];
         let poly_4 = UniPoly::new(co_eff_4);
         let actual = &poly_3 + &poly_4;
         let exp_co_effs = vec![
-            SampleFFE::new(7),
-            SampleFFE::new(-1),
-            SampleFFE::zero(),
-            SampleFFE::one(),
+            FFE::new(7, MODULUS),
+            FFE::new(-1, MODULUS),
+            FFE::zero(),
+            FFE::one(),
         ];
-        let expected = UniPoly::<SampleFFE<SampleFF>, SampleFF>::new(exp_co_effs);
+        let expected = UniPoly::<FFE>::new(exp_co_effs);
         assert_eq!(actual, expected);
     }
 
@@ -264,13 +283,12 @@ mod tests {
     fn interpolate() {
         // Interpolating the values: [3, 1, 2, 4]
         let co_effs = vec![
-            SampleFFE::new(3),
-            SampleFFE::new(1),
-            SampleFFE::new(2),
-            SampleFFE::new(4),
+            FFE::new(3, MODULUS),
+            FFE::new(1, MODULUS),
+            FFE::new(2, MODULUS),
+            FFE::new(4, MODULUS),
         ];
-        let polynomial: UniPoly<SampleFFE<SampleFF>, SampleFF> =
-            UniPoly::<SampleFFE<SampleFF>, SampleFF>::interpolate(&co_effs);
+        let polynomial: UniPoly<FFE> = UniPoly::<FFE>::interpolate(&co_effs);
         println!("{:?}", polynomial);
     }
 }

@@ -7,8 +7,8 @@ use serde::Deserialize;
 
 #[derive(Debug, Deserialize)]
 struct LagrangeInput {
-    x_values: Vec<usize>,
-    y_values: Vec<usize>,
+    x_values: Vec<isize>,
+    y_values: Vec<isize>,
     field: usize,
 }
 
@@ -17,8 +17,8 @@ async fn lagrange_interpolation_over_ff(json: web::Json<LagrangeInput>) -> impl 
     let x_values = &json.x_values;
     let y_values = &json.y_values;
     let field = json.field;
-    // let poly = UniPoly::interpolate_xy(x_values, y_values);
-    // println!("{:?}", poly.)
+    let coefficients = interpolation::lagrange_interpolate(x_values, y_values, field);
+    println!("{:?}", coefficients);
     "Lagrange View"
 }
 
