@@ -234,7 +234,7 @@ impl Add for FFE {
                             rhs.element,
                             modulus,
                         ),
-                        ..self
+                        modulus: Some(modulus),
                     }
                 } else {
                     modulus = rhs.modulus.unwrap();
@@ -245,7 +245,7 @@ impl Add for FFE {
                             rhs.element,
                             modulus,
                         ),
-                        ..self
+                        modulus: Some(modulus),
                     }
                 }
             }
@@ -280,7 +280,7 @@ impl Mul for FFE {
                             rhs.element,
                             modulus,
                         ),
-                        ..self
+                        modulus: Some(modulus),
                     }
                 } else {
                     modulus = rhs.modulus.unwrap();
@@ -291,7 +291,7 @@ impl Mul for FFE {
                             rhs.element,
                             modulus,
                         ),
-                        ..self
+                        modulus: Some(modulus),
                     }
                 }
             }
@@ -326,7 +326,7 @@ impl Sub for FFE {
                             rhs.element,
                             modulus,
                         ),
-                        ..self
+                        modulus: Some(modulus),
                     }
                 } else {
                     modulus = rhs.modulus.unwrap();
@@ -337,7 +337,7 @@ impl Sub for FFE {
                             rhs.element,
                             modulus,
                         ),
-                        ..self
+                        modulus: Some(modulus),
                     }
                 }
             }
