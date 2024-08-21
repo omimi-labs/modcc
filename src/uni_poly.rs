@@ -96,6 +96,7 @@ impl<F: FiniteFieldElement + Neg<Output = F> + Sub<Output = F> + Add<Output = F>
         let mut resulting_polynomial = Self::zero();
         for (x, y) in x_values.iter().zip(y_values.iter()) {
             let lagrange_polynomial = Self::get_lagrange_polynomial(*x, &x_values);
+            println!("{:?}", lagrange_polynomial);
             let y_poly = Self::new(vec![*y]);
             let product = &y_poly * &lagrange_polynomial;
             resulting_polynomial = &resulting_polynomial + &product;
@@ -258,7 +259,7 @@ mod tests {
         let expected = UniPoly::<FFE>::new(exp_co_effs);
         assert_eq!(actual, expected);
 
-        // Test: (x^3 - 3x + 2) * (2x + 5)
+        // Test: (x^3 - 3x + 2) + (2x + 5)
         let co_eff_3 = vec![FFE::new(5, MODULUS), FFE::new(2, MODULUS)];
         let poly_3 = UniPoly::new(co_eff_3);
         let co_eff_4 = vec![
@@ -272,8 +273,8 @@ mod tests {
         let exp_co_effs = vec![
             FFE::new(7, MODULUS),
             FFE::new(-1, MODULUS),
-            FFE::zero(),
-            FFE::one(),
+            FFE::new(0, MODULUS),
+            FFE::new(1, MODULUS),
         ];
         let expected = UniPoly::<FFE>::new(exp_co_effs);
         assert_eq!(actual, expected);
@@ -282,11 +283,12 @@ mod tests {
     #[test]
     fn interpolate() {
         // Interpolating the values: [3, 1, 2, 4]
+        let modulus = 17;
         let co_effs = vec![
-            FFE::new(3, MODULUS),
-            FFE::new(1, MODULUS),
-            FFE::new(2, MODULUS),
-            FFE::new(4, MODULUS),
+            FFE::new(3, modulus),
+            FFE::new(1, modulus),
+            FFE::new(2, modulus),
+            FFE::new(4, modulus),
         ];
         let polynomial: UniPoly<FFE> = UniPoly::<FFE>::interpolate(&co_effs);
         println!("{:?}", polynomial);

@@ -193,6 +193,16 @@ impl FiniteFieldElement for FFE {
     }
 }
 
+// impl PartialEq for FFE {
+//     fn eq(&self, other: &Self) -> bool {
+//         // if self.element == 0 && other.element == 0 {
+//         //     return true;
+//         // } else if self.element == 1 && other.element == 1 {
+//         //     return true;
+//         // }
+//         return self == other;
+//     }
+// }
 enum Ops {
     ADD,
     MUL,
@@ -356,9 +366,27 @@ impl Div for FFE {
     type Output = Self;
 
     fn div(self, rhs: Self) -> Self::Output {
-        let inv = rhs.inverse();
-        let res = self * inv;
-        res
+        match (self.modulus, rhs.modulus) {
+            (None, None) => Self {
+                element: 0,
+                modulus: None,
+            },
+            (_, _) => {
+                if rhs.modulus.is_none() {
+                    let rhs = Self {
+                        element: rhs.element,
+                        ..self
+                    };
+                    let inv = rhs.inverse();
+                    let res = self * inv;
+                    return res;
+                } else {
+                    let inv = rhs.inverse();
+                    let res = self * inv;
+                    return res;
+                }
+            }
+        }
     }
 }
 
@@ -399,183 +427,124 @@ mod tests {
     }
 
     #[test]
-    fn assignment() {
-        let ffe_1 = FFE::new(-56, MODULUS);
-        let ffe_2 = FFE::new(9704, MODULUS);
-        let ffe_3 = FFE::new(3221225477, MODULUS);
-        assert_eq!(ffe_1, FFE::new(3221225417, MODULUS));
-        assert_eq!(ffe_2, FFE::new(9704, MODULUS));
-        assert_eq!(ffe_3, FFE::new(4, MODULUS));
-    }
-
-    #[test]
     fn add() {
         let ffe_1 = FFE::new(56, MODULUS);
         let ffe_2 = FFE::new(8902, MODULUS);
         let new_ff = ffe_1 + ffe_2;
         assert_eq!(new_ff, FFE::new(8958, MODULUS));
+
+        let new_ff = ffe_1 + FFE::zero();
+        assert_eq!(new_ff, ffe_1);
+
+        let new_ff = FFE::zero() + ffe_1;
+        assert_eq!(new_ff, ffe_1);
+
+        let new_ff = ffe_2 + FFE::one();
+        assert_eq!(new_ff, FFE::new(8902 + 1, MODULUS));
+
+        let new_ff = FFE::one() + ffe_2;
+        assert_eq!(new_ff, FFE::new(8902 + 1, MODULUS));
+
+        let mut ffe_3 = FFE::new(6579, MODULUS);
+        let sum = ffe_3 + ffe_1;
+        ffe_3 += ffe_1;
+        assert_eq!(sum, ffe_3);
     }
 
     #[test]
-    fn add_assign() {
-        let mut ffe_1 = FFE::new(56, MODULUS);
-        let ffe_2 = FFE::new(8902, MODULUS);
-        ffe_1 += ffe_2;
-        assert_eq!(ffe_1, FFE::new(8958, MODULUS));
+    fn mul() {
+        let ffe_1 = FFE::new(1912323, MODULUS);
+        let ffe_2 = FFE::new(111091, MODULUS);
+        let new_ff = ffe_1 * ffe_2;
+        assert_eq!(new_ff, FFE::new(3062218648, MODULUS));
+
+        let new_ff = ffe_1 * FFE::zero();
+        assert_eq!(new_ff, FFE::new(0, MODULUS));
+
+        let new_ff = FFE::zero() * ffe_1;
+        assert_eq!(new_ff, FFE::new(0, MODULUS));
+
+        let new_ff = ffe_1 * FFE::one();
+        assert_eq!(new_ff, ffe_1);
+
+        let new_ff = FFE::one() * ffe_1;
+        assert_eq!(new_ff, ffe_1);
+
+        let mut ffe_3 = FFE::new(59079, MODULUS);
+        ffe_3 *= ffe_1;
+        assert_eq!(ffe_3, FFE::new(1912323 * 59079, MODULUS));
     }
 
-    // #[test]
-    // fn mul() {
-    //     let ffe_1 = FFE::new(1912323, MODULUS);
-    //     let ffe_2 = FFE::new(111091, MODULUS);
-    //     let new_ff = ffe_1 * ffe_2;
-    //     assert_eq!(
-    //         new_ff.unwrap(),
-    //         FFE {
-    //             element: 3062218648,
-    //             modulus: MODULUS
-    //         }
-    //     );
-    // }
+    #[test]
+    fn sub() {
+        let ffe_1 = FFE::new(892, MODULUS);
+        let ffe_2 = FFE::new(7, MODULUS);
+        let new_ff = ffe_1 - ffe_2;
+        assert_eq!(new_ff, FFE::new(885, MODULUS));
 
-    // #[test]
-    // fn mul_assign() {
-    //     let mut ffe_1 = FFE::new(1912323, MODULUS);
-    //     let ffe_2 = FFE::new(111091, MODULUS);
-    //     ffe_1 *= ffe_2;
-    //     assert_eq!(
-    //         ffe_1,
-    //         FFE {
-    //             element: 3062218648,
-    //             modulus: MODULUS
-    //         }
-    //     );
-    // }
+        let ffe_3 = FFE::new(2, MODULUS);
+        let ffe_4 = FFE::new(11, MODULUS);
+        let new_ff = ffe_3 - ffe_4;
+        assert_eq!(new_ff, FFE::new(3221225464, MODULUS));
 
-    // #[test]
-    // fn sub() {
-    //     let ffe_1 = FFE::new(892, MODULUS);
-    //     let ffe_2 = FFE::new(7, MODULUS);
-    //     let new_ff = ffe_1 - ffe_2;
-    //     assert_eq!(
-    //         new_ff.unwrap(),
-    //         FFE {
-    //             element: 885,
-    //             modulus: MODULUS
-    //         }
-    //     );
+        let new_ff = ffe_1 - FFE::zero();
+        assert_eq!(new_ff, ffe_1);
 
-    //     let ffe_3 = FFE::new(2, MODULUS);
-    //     let ffe_4 = FFE::new(11, MODULUS);
-    //     let new_ff = ffe_3 - ffe_4;
-    //     assert_eq!(
-    //         new_ff.unwrap(),
-    //         FFE {
-    //             element: 3221225464,
-    //             modulus: MODULUS
-    //         }
-    //     );
-    // }
+        let new_ff = FFE::zero() - ffe_1;
+        assert_eq!(new_ff, FFE::new(-892, MODULUS));
 
-    // #[test]
-    // fn sub_assign() {
-    //     let mut ffe_1 = FFE::new(2, MODULUS);
-    //     let ffe_2 = FFE::new(11, MODULUS);
-    //     ffe_1 -= ffe_2;
-    //     assert_eq!(
-    //         ffe_1,
-    //         FFE {
-    //             element: 3221225464,
-    //             modulus: MODULUS
-    //         }
-    //     );
-    // }
+        let new_ff = ffe_1 - FFE::one();
+        assert_eq!(new_ff, FFE::new(892 - 1, MODULUS));
 
-    // #[test]
-    // fn div() {
-    //     let ffe_1 = FFE::new(892, MODULUS);
-    //     let ffe_2 = FFE::new(7, MODULUS);
-    //     let new_ff = ffe_1 / ffe_2;
-    //     assert_eq!(
-    //         new_ff.unwrap(),
-    //         FFE {
-    //             element: 460175195,
-    //             modulus: MODULUS
-    //         }
-    //     );
+        let new_ff = FFE::one() - ffe_1;
+        assert_eq!(new_ff, FFE::new(1 - 892, MODULUS));
 
-    //     let ffe_3 = FFE::new(2, MODULUS);
-    //     let ffe_4 = FFE::new(11, MODULUS);
-    //     let new_ff = ffe_3 / ffe_4;
-    //     assert_eq!(
-    //         new_ff.unwrap(),
-    //         FFE {
-    //             element: 1464193397,
-    //             modulus: MODULUS
-    //         }
-    //     );
-    // }
+        let mut ffe_5 = FFE::new(97917, MODULUS);
+        ffe_5 -= ffe_1;
+        assert_eq!(ffe_5, FFE::new(97917 - 892, MODULUS));
+    }
 
-    // #[test]
-    // fn div_assign() {
-    //     let mut ffe_1 = FFE::new(892, MODULUS);
-    //     let ffe_2 = FFE::new(7, MODULUS);
-    //     ffe_1 /= ffe_2;
-    //     assert_eq!(
-    //         ffe_1,
-    //         FFE {
-    //             element: 460175195,
-    //             modulus: MODULUS
-    //         }
-    //     );
+    #[test]
+    fn div() {
+        let ffe_1 = FFE::new(892, MODULUS);
+        let ffe_2 = FFE::new(7, MODULUS);
+        let new_ff = ffe_1 / ffe_2;
+        assert_eq!(new_ff, FFE::new(460175195, MODULUS));
 
-    //     let mut ffe_3 = FFE::new(2, MODULUS);
-    //     let ffe_4 = FFE::new(11, MODULUS);
-    //     ffe_3 /= ffe_4;
-    //     assert_eq!(
-    //         ffe_3,
-    //         FFE {
-    //             element: 1464193397,
-    //             modulus: MODULUS
-    //         }
-    //     );
-    // }
+        let ffe_3 = FFE::new(2, MODULUS);
+        let ffe_4 = FFE::new(11, MODULUS);
+        let new_ff = ffe_3 / ffe_4;
+        assert_eq!(new_ff, FFE::new(1464193397, MODULUS));
 
-    // #[test]
-    // fn pow() {
-    //     let ffe_1 = FFE::new(76, MODULUS);
-    //     let new_ff = ffe_1.pow(2);
-    //     assert_eq!(
-    //         new_ff,
-    //         FFE {
-    //             element: 5776,
-    //             modulus: MODULUS
-    //         }
-    //     );
+        let new_ff = FFE::zero() / ffe_1;
+        assert_eq!(new_ff, FFE::new(0, MODULUS));
 
-    //     let ffe_2 = FFE::new(700, MODULUS);
-    //     let new_ff = ffe_2.pow(90);
-    //     assert_eq!(
-    //         new_ff,
-    //         FFE {
-    //             element: 1516783203,
-    //             modulus: MODULUS
-    //         }
-    //     );
-    // }
+        let new_ff = ffe_1 / FFE::one();
+        assert_eq!(new_ff, FFE::new(892, MODULUS));
 
-    // #[test]
-    // fn is_order() {
-    //     #[derive(Debug, Clone, Copy, PartialEq)]
-    //     struct SampleFF1 {}
+        let new_ff = FFE::one() / ffe_1;
+        assert_eq!(new_ff, FFE::new(2350916797, MODULUS));
 
-    //     impl FF for SampleFF1 {
-    //         type FieldType = usize;
-    //         const MODULUS: usize = 71;
-    //     }
+        let mut ffe_5 = FFE::new(892, MODULUS);
+        ffe_5 /= ffe_2;
+        assert_eq!(ffe_5, FFE::new(460175195, MODULUS));
+    }
 
-    //     let ffe_1 = SampleFFE::<SampleFF1>::new(13);
-    //     let order: usize = 70;
-    //     assert!(ffe_1.is_order(order));
-    // }
+    #[test]
+    fn pow() {
+        let ffe_1 = FFE::new(76, MODULUS);
+        let new_ff = ffe_1.pow(2);
+        assert_eq!(new_ff, FFE::new(5776, MODULUS));
+
+        let ffe_2 = FFE::new(700, MODULUS);
+        let new_ff = ffe_2.pow(90);
+        assert_eq!(new_ff, FFE::new(1516783203, MODULUS));
+    }
+
+    #[test]
+    fn is_order() {
+        let ffe_1 = FFE::new(13, 71);
+        let order: usize = 70;
+        assert!(ffe_1.is_order(order));
+    }
 }
