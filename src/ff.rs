@@ -90,7 +90,7 @@ fn multiplicative_inverse(a: isize, b: isize) -> Result<usize, String> {
     }
 }
 
-#[derive(Debug, Clone, Copy, PartialEq)]
+#[derive(Debug, Clone, Copy, PartialEq, Default)]
 pub struct FFE {
     element: usize,
     modulus: Option<usize>,

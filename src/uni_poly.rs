@@ -1,5 +1,6 @@
-use crate::ff::FiniteFieldElement;
 use std::ops::{Add, Mul, Neg, Sub};
+
+use crate::ff::FiniteFieldElement;
 
 pub trait Polynomial<F>: Sized {
     fn is_zero(&self) -> bool;
@@ -15,16 +16,20 @@ pub trait Polynomial<F>: Sized {
     fn one() -> Self;
 }
 
-pub trait UnivariatePolynomial<F>: Polynomial<F> {
+pub trait UnivariatePolynomial<F: Default>: Polynomial<F> {
     fn coefficients(&self) -> Vec<F>;
 
     fn evaluate(&self, x: F) -> F;
 
-    fn interpolate(y_values: &Vec<F>) -> Self;
+    fn interpolate(y_values: &Vec<F>) -> (Self, LagrangeInterpolationSteps);
 
-    fn interpolate_xy(x_values: &Vec<F>, y_values: &Vec<F>) -> Self;
+    fn interpolate_xy(x_values: &Vec<F>, y_values: &Vec<F>) -> (Self, LagrangeInterpolationSteps);
 
-    fn get_lagrange_polynomial(x_value: F, x_values: &Vec<F>) -> Self;
+    fn get_lagrange_polynomial(
+        i: usize,
+        x_value: F,
+        x_values: &Vec<F>,
+    ) -> (Self, LagrangeBasisInnerSteps);
 }
 
 // Univariate Polynomial
@@ -66,7 +71,76 @@ impl<F: FiniteFieldElement> Polynomial<F> for UniPoly<F> {
     }
 }
 
-impl<F: FiniteFieldElement + Neg<Output = F> + Sub<Output = F> + Add<Output = F>>
+#[derive(Debug, Clone, Default)]
+struct LagrangeBasisInner {
+    x_i: usize,
+    x_j: usize,
+    j: usize,
+}
+
+#[derive(Debug, Default)]
+pub struct LagrangeBasisInnerSteps {
+    inners: Vec<LagrangeBasisInner>,
+    inverse: usize,
+}
+
+impl LagrangeBasisInnerSteps {
+    fn add_to_lagrange_basis_inner(&mut self, x_i: usize, x_j: usize, j: usize) {
+        let lbi = LagrangeBasisInner { x_i, x_j, j };
+        self.inners.push(lbi)
+    }
+
+    fn add_inverse_to_lagrange_basis_inner(&mut self, inverse: usize) {
+        self.inverse = inverse;
+    }
+}
+
+#[derive(Debug)]
+struct LagrangeBasisAndY {
+    y: usize,
+    lagrange_basis: Vec<usize>,
+    i: usize,
+    steps: LagrangeBasisInnerSteps,
+}
+
+#[derive(Debug, Default)]
+pub struct LagrangeInterpolationSteps {
+    y_values: Vec<usize>,
+    x_values: Vec<usize>,
+    lagrange_basis_and_y_values: Vec<LagrangeBasisAndY>,
+    resulting_polynomial: Vec<usize>,
+}
+
+impl LagrangeInterpolationSteps {
+    pub fn add_y_values(&mut self, y_values: Vec<usize>) {
+        self.y_values = y_values;
+    }
+
+    fn add_x_values(&mut self, x_values: Vec<usize>) {
+        self.x_values = x_values;
+    }
+
+    fn add_resulting_polynomial(&mut self, coefficients: Vec<usize>) {
+        self.resulting_polynomial = coefficients;
+    }
+
+    fn add_to_lagrange_basis_and_y_values(
+        &mut self,
+        y: usize,
+        lagrange_basis: Vec<usize>,
+        i: usize,
+        steps: LagrangeBasisInnerSteps,
+    ) {
+        self.lagrange_basis_and_y_values.push(LagrangeBasisAndY {
+            y,
+            lagrange_basis,
+            i,
+            steps,
+        })
+    }
+}
+
+impl<F: FiniteFieldElement + Default + Neg<Output = F> + Sub<Output = F> + Add<Output = F>>
     UnivariatePolynomial<F> for UniPoly<F>
 {
     fn coefficients(&self) -> Vec<F> {
@@ -83,7 +157,7 @@ impl<F: FiniteFieldElement + Neg<Output = F> + Sub<Output = F> + Add<Output = F>
         identity
     }
 
-    fn interpolate(y_values: &Vec<F>) -> Self {
+    fn interpolate(y_values: &Vec<F>) -> (Self, LagrangeInterpolationSteps) {
         let mut x_values = vec![];
         for (i, y) in y_values.iter().enumerate() {
             x_values.push(F::new(i.try_into().unwrap(), y.modulus()));
@@ -91,20 +165,47 @@ impl<F: FiniteFieldElement + Neg<Output = F> + Sub<Output = F> + Add<Output = F>
         Self::interpolate_xy(&x_values, y_values)
     }
 
-    fn interpolate_xy(x_values: &Vec<F>, y_values: &Vec<F>) -> Self {
+    fn interpolate_xy(x_values: &Vec<F>, y_values: &Vec<F>) -> (Self, LagrangeInterpolationSteps) {
         assert_eq!(x_values.len(), y_values.len());
+        let mut main_steps = LagrangeInterpolationSteps::default();
+        main_steps.add_y_values(y_values.iter().map(|&x| x.element()).collect());
+        main_steps.add_x_values(x_values.iter().map(|&x| x.element()).collect());
+
         let mut resulting_polynomial = Self::zero();
-        for (x, y) in x_values.iter().zip(y_values.iter()) {
-            let lagrange_polynomial = Self::get_lagrange_polynomial(*x, &x_values);
-            println!("{:?}", lagrange_polynomial);
+        for (i, (x, y)) in x_values.iter().zip(y_values.iter()).enumerate() {
+            let (lagrange_polynomial, steps) = Self::get_lagrange_polynomial(i, *x, &x_values);
             let y_poly = Self::new(vec![*y]);
+
             let product = &y_poly * &lagrange_polynomial;
             resulting_polynomial = &resulting_polynomial + &product;
+
+            main_steps.add_to_lagrange_basis_and_y_values(
+                y.element(),
+                lagrange_polynomial
+                    .coefficients
+                    .iter()
+                    .map(|&x| x.element())
+                    .collect(),
+                i,
+                steps,
+            );
         }
-        resulting_polynomial
+
+        main_steps.add_resulting_polynomial(
+            resulting_polynomial
+                .coefficients
+                .iter()
+                .map(|&x| x.element())
+                .collect(),
+        );
+        (resulting_polynomial, main_steps)
     }
 
-    fn get_lagrange_polynomial(x_value: F, x_values: &Vec<F>) -> Self {
+    fn get_lagrange_polynomial(
+        i: usize,
+        x_value: F,
+        x_values: &Vec<F>,
+    ) -> (Self, LagrangeBasisInnerSteps) {
         /*
          * L_i = \prod_{j=0, j \neq i}^{n} \dfrac{x - x_j}{x_i - x_j}
          *
@@ -113,17 +214,23 @@ impl<F: FiniteFieldElement + Neg<Output = F> + Sub<Output = F> + Add<Output = F>
          *      `j` is the index in the loop below
          */
         let mut resulting_polynomial = Self::one();
-        for x in x_values.iter() {
+        let mut running_denominator = F::one();
+        let mut lbis = LagrangeBasisInnerSteps::default();
+        for (j, x) in x_values.iter().enumerate() {
             if *x == x_value {
                 continue;
             }
             let numerator = Self::new(vec![-(*x), F::one()]);
-            let inverse_of_denominator = Self::new(vec![(x_value - *x).inverse()]);
+            let denominator = x_value - *x;
+            running_denominator *= denominator;
+            let inverse_of_denominator = Self::new(vec![denominator.inverse()]);
+            lbis.add_to_lagrange_basis_inner(x_value.element(), x.element(), j);
             let product = &numerator * &inverse_of_denominator;
             // TODO: implement mul_assign() for &UniPoly
             resulting_polynomial = &resulting_polynomial * &product;
         }
-        resulting_polynomial
+        lbis.add_inverse_to_lagrange_basis_inner(running_denominator.inverse().element());
+        (resulting_polynomial, lbis)
     }
 }
 
@@ -290,7 +397,7 @@ mod tests {
             FFE::new(2, modulus),
             FFE::new(4, modulus),
         ];
-        let polynomial: UniPoly<FFE> = UniPoly::<FFE>::interpolate(&co_effs);
-        println!("{:?}", polynomial);
+        let (_poly, steps) = UniPoly::<FFE>::interpolate(&co_effs);
+        println!("{:?}", steps);
     }
 }

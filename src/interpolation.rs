@@ -14,11 +14,7 @@ pub fn lagrange_interpolate(
         let y_ffe = FFE::new(*y, field);
         new_y_values.push(y_ffe)
     }
-    let poly = UniPoly::interpolate_xy(&new_x_values, &new_y_values);
-    println!("{:?}", poly);
-    let mut coefficients = vec![];
-    for x in poly.coefficients().iter() {
-        coefficients.push(x.element())
-    }
+    let (poly, steps) = UniPoly::interpolate_xy(&new_x_values, &new_y_values);
+    let coefficients: Vec<usize> = poly.coefficients().iter().map(|&x| x.element()).collect();
     return coefficients;
 }
