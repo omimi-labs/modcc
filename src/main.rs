@@ -2,25 +2,39 @@ mod ff;
 mod interpolation;
 mod uni_poly;
 
+use uni_poly::LagrangeInterpolationSteps;
+
 use actix_cors::Cors;
 use actix_web::{http, post, web, App, HttpResponse, HttpServer, Responder};
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Deserialize)]
-struct LagrangeInput {
-    x_values: Vec<isize>,
-    y_values: Vec<isize>,
+struct LagrangeInterpolationRequest {
+    x_values: Vec<i128>,
+    y_values: Vec<i128>,
     field: usize,
 }
 
+#[derive(Debug, Serialize)]
+struct LagrangeInterpolationResponse {
+    coefficients: Vec<u128>,
+    steps: LagrangeInterpolationSteps,
+}
+
 #[post("/lf/")]
-async fn lagrange_interpolation_over_ff(json: web::Json<LagrangeInput>) -> impl Responder {
+async fn lagrange_interpolation_over_ff(
+    json: web::Json<LagrangeInterpolationRequest>,
+) -> impl Responder {
     let x_values = &json.x_values;
     let y_values = &json.y_values;
     let field = json.field;
-    let coefficients = interpolation::lagrange_interpolate(x_values, y_values, field);
-    println!("{:?}", coefficients);
-    HttpResponse::Ok().json(coefficients)
+    let (coefficients, steps) =
+        interpolation::lagrange_interpolate(x_values, y_values, field as u128);
+    let response = LagrangeInterpolationResponse {
+        coefficients,
+        steps,
+    };
+    HttpResponse::Ok().json(response)
 }
 
 #[actix_web::main]

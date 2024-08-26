@@ -689,6 +689,7 @@ dependencies = [
  "actix-cors",
  "actix-web",
  "serde",
+ "serde_json",
 ]
 
 [[package]]

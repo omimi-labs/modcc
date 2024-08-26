@@ -1,22 +1,22 @@
 use std::{
     fmt::Debug,
     ops::{Add, AddAssign, Div, DivAssign, Mul, MulAssign, Neg, Rem, Sub, SubAssign},
-    usize,
+    u128,
 };
 
 struct ISize {
-    value: isize,
+    value: i128,
 }
 
-impl Rem<usize> for ISize {
-    type Output = usize;
+impl Rem<u128> for ISize {
+    type Output = u128;
 
-    fn rem(self, rhs: usize) -> Self::Output {
+    fn rem(self, rhs: u128) -> Self::Output {
         if self.value.is_negative() {
             // -a mod b = (b - (a mod b) mod b
-            (rhs - (self.value.abs() as usize % rhs)) % rhs
+            (rhs - (self.value.abs() as u128 % rhs)) % rhs
         } else {
-            let val = self.value as usize;
+            let val = self.value as u128;
             val % rhs
         }
     }
@@ -37,11 +37,11 @@ pub trait FiniteFieldElement:
     + DivAssign
     + Neg
 {
-    fn new(element: isize, modulus: usize) -> Self;
+    fn new(element: i128, modulus: u128) -> Self;
 
-    fn element(&self) -> usize;
+    fn element(&self) -> u128;
 
-    fn modulus(&self) -> usize;
+    fn modulus(&self) -> u128;
 
     fn zero() -> Self;
 
@@ -49,12 +49,12 @@ pub trait FiniteFieldElement:
 
     fn inverse(&self) -> Self;
 
-    fn pow(&self, n: usize) -> Self;
+    fn pow(&self, n: u128) -> Self;
 
-    fn is_order(&self, order: usize) -> bool;
+    fn is_order(&self, order: u128) -> bool;
 }
 
-fn multiplicative_inverse(a: isize, b: isize) -> Result<usize, String> {
+fn multiplicative_inverse(a: i128, b: i128) -> Result<u128, String> {
     /*
      * Computes the multiplicative inverse of a mod b
      * using the "Extended Euclidean Algorithm"
@@ -85,19 +85,19 @@ fn multiplicative_inverse(a: isize, b: isize) -> Result<usize, String> {
     }
 
     match n {
-        1 => Ok(ISize { value: t_1 } % modulus as usize),
+        1 => Ok(ISize { value: t_1 } % modulus as u128),
         _ => Err(String::from("Multiplicative inverse does not exist")),
     }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Default)]
 pub struct FFE {
-    element: usize,
-    modulus: Option<usize>,
+    element: u128,
+    modulus: Option<u128>,
 }
 
 impl FiniteFieldElement for FFE {
-    fn new(value: isize, modulus: usize) -> Self {
+    fn new(value: i128, modulus: u128) -> Self {
         let field_element = ISize { value } % modulus;
         Self {
             element: field_element,
@@ -105,11 +105,11 @@ impl FiniteFieldElement for FFE {
         }
     }
 
-    fn element(&self) -> usize {
+    fn element(&self) -> u128 {
         self.element
     }
 
-    fn modulus(&self) -> usize {
+    fn modulus(&self) -> u128 {
         match self.modulus {
             Some(modulus) => modulus,
             None => 0,
@@ -142,7 +142,7 @@ impl FiniteFieldElement for FFE {
         }
     }
 
-    fn pow(&self, mut n: usize) -> Self {
+    fn pow(&self, mut n: u128) -> Self {
         let mut current_power = self.to_owned();
         let mut result = Self::one();
         result.modulus = self.modulus;
@@ -156,7 +156,7 @@ impl FiniteFieldElement for FFE {
         result
     }
 
-    fn is_order(&self, order: usize) -> bool {
+    fn is_order(&self, order: u128) -> bool {
         /*
          * Checks the order of an element in the finite field
          * i.e the order of an element is n such that 'a ^ n = e' where
@@ -193,32 +193,20 @@ impl FiniteFieldElement for FFE {
     }
 }
 
-// impl PartialEq for FFE {
-//     fn eq(&self, other: &Self) -> bool {
-//         // if self.element == 0 && other.element == 0 {
-//         //     return true;
-//         // } else if self.element == 1 && other.element == 1 {
-//         //     return true;
-//         // }
-//         return self == other;
-//     }
-// }
 enum Ops {
     ADD,
     MUL,
     SUB,
 }
 
-fn perform_mod_operation(op: Ops, a: usize, b: usize, n: usize) -> usize {
+fn perform_mod_operation(op: Ops, a: u128, b: u128, n: u128) -> u128 {
     match op {
         Ops::ADD => (a + b) % n,
         Ops::MUL => (a * b) % n,
         Ops::SUB => {
             // TODO: investigate safety of conversion
             let (sub, _) = a.overflowing_sub(b);
-            let res = ISize {
-                value: sub as isize,
-            } % n;
+            let res = ISize { value: sub as i128 } % n;
             res
         }
     }
@@ -234,7 +222,7 @@ impl Add for FFE {
                 ..self
             },
             (_, _) => {
-                let modulus: usize;
+                let modulus: u128;
                 if self.modulus.is_some() {
                     modulus = self.modulus.unwrap();
                     Self {
@@ -280,7 +268,7 @@ impl Mul for FFE {
                 ..self
             },
             (_, _) => {
-                let modulus: usize;
+                let modulus: u128;
                 if self.modulus.is_some() {
                     modulus = self.modulus.unwrap();
                     Self {
@@ -326,7 +314,7 @@ impl Sub for FFE {
                 ..self
             },
             (_, _) => {
-                let modulus: usize;
+                let modulus: u128;
                 if self.modulus.is_some() {
                     modulus = self.modulus.unwrap();
                     Self {
@@ -414,7 +402,7 @@ impl Neg for FFE {
 mod tests {
     use super::*;
 
-    const MODULUS: usize = 3221225473;
+    const MODULUS: u128 = 3221225473;
 
     #[test]
     fn mi() {
@@ -544,7 +532,7 @@ mod tests {
     #[test]
     fn is_order() {
         let ffe_1 = FFE::new(13, 71);
-        let order: usize = 70;
+        let order: u128 = 70;
         assert!(ffe_1.is_order(order));
     }
 }
