@@ -71,25 +71,12 @@ impl<F: FiniteFieldElement> Polynomial<F> for UniPoly<F> {
     }
 }
 
-#[derive(Debug, Clone, Default, Serialize)]
-struct LagrangeBasisInner {
-    x_i: u128,
-    x_j: u128,
-    j: u128,
-}
-
 #[derive(Debug, Default, Serialize)]
 pub struct LagrangeBasisInnerSteps {
-    inners: Vec<LagrangeBasisInner>,
     inverse: u128,
 }
 
 impl LagrangeBasisInnerSteps {
-    fn add_to_lagrange_basis_inner(&mut self, x_i: u128, x_j: u128, j: u128) {
-        let lbi = LagrangeBasisInner { x_i, x_j, j };
-        self.inners.push(lbi)
-    }
-
     fn add_inverse_to_lagrange_basis_inner(&mut self, inverse: u128) {
         self.inverse = inverse;
     }
@@ -109,6 +96,7 @@ pub struct LagrangeInterpolationSteps {
     y_values: Vec<u128>,
     x_values: Vec<u128>,
     lagrange_basis_and_y_values: Vec<LagrangeBasisAndY>,
+    resulting_polynomial: Vec<u128>,
 }
 
 impl LagrangeInterpolationSteps {
@@ -135,6 +123,10 @@ impl LagrangeInterpolationSteps {
             i,
             steps,
         })
+    }
+
+    fn add_resulting_polynonial(&mut self, coefficients: Vec<u128>) {
+        self.resulting_polynomial = coefficients;
     }
 }
 
@@ -187,6 +179,13 @@ impl<F: FiniteFieldElement + Default + Neg<Output = F> + Sub<Output = F> + Add<O
                 steps,
             );
         }
+        main_steps.add_resulting_polynonial(
+            resulting_polynomial
+                .coefficients()
+                .iter()
+                .map(|&x| x.element())
+                .collect(),
+        );
         (resulting_polynomial, main_steps)
     }
 
@@ -201,7 +200,7 @@ impl<F: FiniteFieldElement + Default + Neg<Output = F> + Sub<Output = F> + Add<O
         let mut resulting_polynomial = Self::one();
         let mut running_denominator = F::one();
         let mut lbis = LagrangeBasisInnerSteps::default();
-        for (j, x) in x_values.iter().enumerate() {
+        for x in x_values.iter() {
             if *x == x_value {
                 continue;
             }
@@ -209,7 +208,6 @@ impl<F: FiniteFieldElement + Default + Neg<Output = F> + Sub<Output = F> + Add<O
             let denominator = x_value - *x;
             running_denominator *= denominator;
             let inverse_of_denominator = Self::new(vec![denominator.inverse()]);
-            lbis.add_to_lagrange_basis_inner(x_value.element(), x.element(), j as u128);
             let product = &numerator * &inverse_of_denominator;
             // TODO: implement mul_assign() for &UniPoly
             resulting_polynomial = &resulting_polynomial * &product;

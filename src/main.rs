@@ -34,6 +34,7 @@ async fn lagrange_interpolation_over_ff(
         coefficients,
         steps,
     };
+    println!("{:?}", response);
     HttpResponse::Ok().json(response)
 }
 
