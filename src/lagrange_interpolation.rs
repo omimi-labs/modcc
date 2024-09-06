@@ -1,5 +1,5 @@
 use crate::ff::{FiniteFieldElement, FFE};
-use crate::uni_poly::{LagrangeInterpolationSteps, UniPoly, UnivariatePolynomial};
+use crate::univariate_poly::{LagrangeInterpolationSteps, UniPoly, UnivariatePolynomial};
 
 pub fn lagrange_interpolate(
     x_values: &Vec<i128>,

@@ -309,10 +309,14 @@ impl Sub for FFE {
 
     fn sub(self, rhs: Self) -> Self::Output {
         match (self.modulus, rhs.modulus) {
-            (None, None) => Self {
-                element: self.element - rhs.element,
-                ..self
-            },
+            (None, None) => {
+                println!("{}", self.element);
+                println!("{}", rhs.element);
+                Self {
+                    element: self.element - rhs.element,
+                    ..self
+                }
+            }
             (_, _) => {
                 let modulus: u128;
                 if self.modulus.is_some() {

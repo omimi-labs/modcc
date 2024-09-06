@@ -1,8 +1,10 @@
 mod ff;
-mod interpolation;
-mod uni_poly;
+mod lagrange_interpolation;
+mod multilinear_interpolation;
+mod multilinear_poly;
+mod univariate_poly;
 
-use uni_poly::LagrangeInterpolationSteps;
+use univariate_poly::LagrangeInterpolationSteps;
 
 use actix_cors::Cors;
 use actix_web::{http, post, web, App, HttpResponse, HttpServer, Responder};
@@ -29,12 +31,11 @@ async fn lagrange_interpolation_over_ff(
     let y_values = &json.y_values;
     let field = json.field;
     let (coefficients, steps) =
-        interpolation::lagrange_interpolate(x_values, y_values, field as u128);
+        lagrange_interpolation::lagrange_interpolate(x_values, y_values, field as u128);
     let response = LagrangeInterpolationResponse {
         coefficients,
         steps,
     };
-    println!("{:?}", response);
     HttpResponse::Ok().json(response)
 }
 
