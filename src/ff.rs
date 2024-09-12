@@ -1,32 +1,16 @@
+use num_bigint::BigInt;
+use num_traits::One;
+use num_traits::Zero;
 use std::{
     fmt::Debug,
     ops::{Add, AddAssign, Div, DivAssign, Mul, MulAssign, Neg, Rem, Sub, SubAssign},
     u128,
 };
 
-struct ISize {
-    value: i128,
-}
-
-impl Rem<u128> for ISize {
-    type Output = u128;
-
-    fn rem(self, rhs: u128) -> Self::Output {
-        if self.value.is_negative() {
-            // -a mod b = (b - (a mod b) mod b
-            (rhs - (self.value.abs() as u128 % rhs)) % rhs
-        } else {
-            let val = self.value as u128;
-            val % rhs
-        }
-    }
-}
-
 pub trait FiniteFieldElement:
     Sized
     + PartialEq
     + Debug
-    + Copy
     + Add
     + Sub
     + Mul<Output = Self>
@@ -37,159 +21,82 @@ pub trait FiniteFieldElement:
     + DivAssign
     + Neg
 {
-    fn new(element: i128, modulus: u128) -> Self;
+    fn new(element: &BigInt, modulus: &BigInt) -> Self;
 
-    fn element(&self) -> u128;
+    fn element(&self) -> BigInt;
 
-    fn modulus(&self) -> u128;
+    fn modulus(&self) -> Option<BigInt>;
 
     fn zero() -> Self;
 
     fn one() -> Self;
 
-    fn inverse(&self) -> Self;
+    fn inverse(&self) -> Option<Self>;
 
     fn pow(&self, n: u128) -> Self;
-
-    fn is_order(&self, order: u128) -> bool;
 }
 
-fn multiplicative_inverse(a: i128, b: i128) -> Result<u128, String> {
-    /*
-     * Computes the multiplicative inverse of a mod b
-     * using the "Extended Euclidean Algorithm"
-     */
-
-    let modulus = b;
-
-    let (mut m, mut n);
-    if a > b {
-        m = a;
-        n = b;
-    } else {
-        m = b;
-        n = a;
-    }
-    let mut q = m / n; // quotient
-    let mut r = m % n; // remainder
-    let mut t_0 = 0;
-    let mut t_1 = 1;
-    let mut t = t_0 - (t_1 * q);
-
-    while r != 0 {
-        (m, n) = (n, r);
-        (t_0, t_1) = (t_1, t);
-        q = m / n;
-        r = m % n;
-        t = t_0 - (t_1 * q);
-    }
-
-    match n {
-        1 => Ok(ISize { value: t_1 } % modulus as u128),
-        _ => Err(String::from("Multiplicative inverse does not exist")),
-    }
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Default)]
+#[derive(Debug, Clone, PartialEq, Default)]
 pub struct FFE {
-    element: u128,
-    modulus: Option<u128>,
+    element: BigInt,
+    modulus: Option<BigInt>,
 }
 
 impl FiniteFieldElement for FFE {
-    fn new(value: i128, modulus: u128) -> Self {
-        let field_element = ISize { value } % modulus;
+    fn new(value: &BigInt, modulus: &BigInt) -> Self {
+        let field_element = ((value % modulus) + modulus) % modulus;
         Self {
             element: field_element,
-            modulus: Some(modulus),
+            modulus: Some(modulus.clone()),
         }
     }
 
-    fn element(&self) -> u128 {
-        self.element
+    fn element(&self) -> BigInt {
+        self.element.clone()
     }
 
-    fn modulus(&self) -> u128 {
-        match self.modulus {
-            Some(modulus) => modulus,
-            None => 0,
-        }
+    fn modulus(&self) -> Option<BigInt> {
+        self.modulus.clone()
     }
 
     fn zero() -> Self {
         FFE {
-            element: 0,
+            element: BigInt::zero(),
             modulus: None,
         }
     }
 
     fn one() -> Self {
         FFE {
-            element: 1,
+            element: BigInt::one(),
             modulus: None,
         }
     }
 
-    fn inverse(&self) -> Self {
-        let inv = multiplicative_inverse(
-            self.element.try_into().unwrap(),
-            self.modulus.unwrap().try_into().unwrap(),
-        )
-        .unwrap();
-        Self {
-            element: inv,
-            ..*self
+    fn inverse(&self) -> Option<Self> {
+        let modulus = self.modulus.clone().unwrap();
+        let inv = self.element.modinv(&modulus);
+        match inv {
+            Some(inverse) => Some(Self {
+                element: inverse,
+                ..self.clone()
+            }),
+            None => None,
         }
     }
 
     fn pow(&self, mut n: u128) -> Self {
         let mut current_power = self.to_owned();
         let mut result = Self::one();
-        result.modulus = self.modulus;
+        result.modulus = self.modulus.clone();
         while n > 0 {
             if n % 2 == 1 {
-                result = result * current_power;
+                result = result * current_power.clone();
             }
             n = n / 2;
-            current_power = current_power * current_power;
+            current_power *= current_power.clone();
         }
         result
-    }
-
-    fn is_order(&self, order: u128) -> bool {
-        /*
-         * Checks the order of an element in the finite field
-         * i.e the order of an element is n such that 'a ^ n = e' where
-         * a is the element and e is the identity element; in this
-         * case 1.
-         *
-         * The naive approach is the compute the element exponent the order(element ^ order)
-         * checking that its equal to the identity and iterate through all the values [1, order - 1]
-         * to check that check no other produces the same result as the above(i.e element ^ i = identity)
-         *
-         * We can perform a simple trick on the second part to make this a bit faster:
-         *
-         * - Instead of performing exponentiation on every iteration, we multiply by the previous multiple(i.e memoization)
-         */
-
-        let mut identity = Self::one();
-        identity.modulus = self.modulus;
-        let exp = self.pow(order);
-        let res = if identity == exp {
-            let mut res_inner = true;
-            let mut mul = *self;
-            for _ in 2..order {
-                mul *= *self;
-                if mul == identity {
-                    res_inner = false;
-                    break;
-                }
-            }
-            res_inner
-        } else {
-            false
-        };
-        return res;
     }
 }
 
@@ -199,16 +106,11 @@ enum Ops {
     SUB,
 }
 
-fn perform_mod_operation(op: Ops, a: u128, b: u128, n: u128) -> u128 {
+fn perform_mod_operation(op: Ops, a: &BigInt, b: &BigInt, n: &BigInt) -> BigInt {
     match op {
         Ops::ADD => (a + b) % n,
         Ops::MUL => (a * b) % n,
-        Ops::SUB => {
-            // TODO: investigate safety of conversion
-            let (sub, _) = a.overflowing_sub(b);
-            let res = ISize { value: sub as i128 } % n;
-            res
-        }
+        Ops::SUB => ((a - b) + n) % n,
     }
 }
 
@@ -216,34 +118,34 @@ impl Add for FFE {
     type Output = Self;
 
     fn add(self, rhs: Self) -> Self::Output {
-        match (self.modulus, rhs.modulus) {
+        match (&self.modulus, &rhs.modulus) {
             (None, None) => Self {
-                element: self.element + rhs.element,
-                ..self
+                element: &self.element + &rhs.element,
+                ..self.clone()
             },
             (_, _) => {
-                let modulus: u128;
+                let modulus: BigInt;
                 if self.modulus.is_some() {
                     modulus = self.modulus.unwrap();
                     Self {
                         element: perform_mod_operation(
                             Ops::ADD,
-                            self.element,
-                            rhs.element,
-                            modulus,
+                            &self.element,
+                            &rhs.element,
+                            &modulus,
                         ),
-                        modulus: Some(modulus),
+                        modulus: Some(modulus.clone()),
                     }
                 } else {
-                    modulus = rhs.modulus.unwrap();
+                    modulus = rhs.modulus.clone().unwrap();
                     Self {
                         element: perform_mod_operation(
                             Ops::ADD,
-                            self.element,
-                            rhs.element,
-                            modulus,
+                            &self.element,
+                            &rhs.element,
+                            &modulus,
                         ),
-                        modulus: Some(modulus),
+                        modulus: Some(modulus.clone()),
                     }
                 }
             }
@@ -253,7 +155,7 @@ impl Add for FFE {
 
 impl AddAssign for FFE {
     fn add_assign(&mut self, rhs: Self) {
-        let addition = *self + rhs;
+        let addition = self.clone() + rhs;
         *self = addition;
     }
 }
@@ -262,32 +164,32 @@ impl Mul for FFE {
     type Output = Self;
 
     fn mul(self, rhs: Self) -> Self::Output {
-        match (self.modulus, rhs.modulus) {
+        match (&self.modulus, &rhs.modulus) {
             (None, None) => Self {
-                element: self.element * rhs.element,
-                ..self
+                element: self.element.clone() * rhs.element,
+                ..self.clone()
             },
             (_, _) => {
-                let modulus: u128;
+                let modulus: BigInt;
                 if self.modulus.is_some() {
-                    modulus = self.modulus.unwrap();
+                    modulus = self.clone().modulus.clone().unwrap();
                     Self {
                         element: perform_mod_operation(
                             Ops::MUL,
-                            self.element,
-                            rhs.element,
-                            modulus,
+                            &self.element,
+                            &rhs.element,
+                            &modulus,
                         ),
-                        modulus: Some(modulus),
+                        modulus: Some(modulus.clone()),
                     }
                 } else {
                     modulus = rhs.modulus.unwrap();
                     Self {
                         element: perform_mod_operation(
                             Ops::MUL,
-                            self.element,
-                            rhs.element,
-                            modulus,
+                            &self.element,
+                            &rhs.element,
+                            &modulus,
                         ),
                         modulus: Some(modulus),
                     }
@@ -299,7 +201,7 @@ impl Mul for FFE {
 
 impl MulAssign for FFE {
     fn mul_assign(&mut self, rhs: Self) {
-        let mul = *self * rhs;
+        let mul = self.clone() * rhs;
         *self = mul;
     }
 }
@@ -308,25 +210,21 @@ impl Sub for FFE {
     type Output = Self;
 
     fn sub(self, rhs: Self) -> Self::Output {
-        match (self.modulus, rhs.modulus) {
-            (None, None) => {
-                println!("{}", self.element);
-                println!("{}", rhs.element);
-                Self {
-                    element: self.element - rhs.element,
-                    ..self
-                }
-            }
+        match (&self.modulus, &rhs.modulus) {
+            (None, None) => Self {
+                element: &self.element - &rhs.element,
+                ..self
+            },
             (_, _) => {
-                let modulus: u128;
+                let modulus: BigInt;
                 if self.modulus.is_some() {
                     modulus = self.modulus.unwrap();
                     Self {
                         element: perform_mod_operation(
                             Ops::SUB,
-                            self.element,
-                            rhs.element,
-                            modulus,
+                            &self.element,
+                            &rhs.element,
+                            &modulus,
                         ),
                         modulus: Some(modulus),
                     }
@@ -335,9 +233,9 @@ impl Sub for FFE {
                     Self {
                         element: perform_mod_operation(
                             Ops::SUB,
-                            self.element,
-                            rhs.element,
-                            modulus,
+                            &self.element,
+                            &rhs.element,
+                            &modulus,
                         ),
                         modulus: Some(modulus),
                     }
@@ -349,7 +247,7 @@ impl Sub for FFE {
 
 impl SubAssign for FFE {
     fn sub_assign(&mut self, rhs: Self) {
-        let sub = *self - rhs;
+        let sub = self.clone() - rhs;
         *self = sub;
     }
 }
@@ -358,22 +256,22 @@ impl Div for FFE {
     type Output = Self;
 
     fn div(self, rhs: Self) -> Self::Output {
-        match (self.modulus, rhs.modulus) {
+        match (&self.modulus, &rhs.modulus) {
             (None, None) => Self {
-                element: 0,
+                element: BigInt::zero(),
                 modulus: None,
             },
             (_, _) => {
                 if rhs.modulus.is_none() {
                     let rhs = Self {
                         element: rhs.element,
-                        ..self
+                        ..self.clone()
                     };
-                    let inv = rhs.inverse();
+                    let inv = rhs.inverse().unwrap();
                     let res = self * inv;
                     return res;
                 } else {
-                    let inv = rhs.inverse();
+                    let inv = rhs.inverse().unwrap();
                     let res = self * inv;
                     return res;
                 }
@@ -384,7 +282,7 @@ impl Div for FFE {
 
 impl DivAssign for FFE {
     fn div_assign(&mut self, rhs: Self) {
-        let div = *self / rhs;
+        let div = self.clone() / rhs;
         *self = div;
     }
 }
@@ -409,134 +307,174 @@ mod tests {
     const MODULUS: u128 = 3221225473;
 
     #[test]
-    fn mi() {
-        let mi_1 = multiplicative_inverse(3, 5);
-        assert_eq!(mi_1, Ok(2));
-        let mi_2 = multiplicative_inverse(11, 26);
-        assert_eq!(mi_2, Ok(19));
-        let mi_2 = multiplicative_inverse(10, 5);
-        assert!(mi_2.is_err());
-    }
-
-    #[test]
     fn add() {
-        let ffe_1 = FFE::new(56, MODULUS);
-        let ffe_2 = FFE::new(8902, MODULUS);
-        let new_ff = ffe_1 + ffe_2;
-        assert_eq!(new_ff, FFE::new(8958, MODULUS));
+        let modulus = BigInt::from(MODULUS);
 
-        let new_ff = ffe_1 + FFE::zero();
+        let ffe_1 = FFE::new(&BigInt::from(56), &modulus);
+        let ffe_2 = FFE::new(&BigInt::from(8902), &modulus);
+        let new_ff = ffe_1.clone() + ffe_2.clone();
+        assert_eq!(new_ff, FFE::new(&BigInt::from(8958), &modulus));
+
+        let new_ff = ffe_1.clone() + FFE::zero();
         assert_eq!(new_ff, ffe_1);
 
-        let new_ff = FFE::zero() + ffe_1;
+        let new_ff = FFE::zero() + ffe_1.clone();
         assert_eq!(new_ff, ffe_1);
 
-        let new_ff = ffe_2 + FFE::one();
-        assert_eq!(new_ff, FFE::new(8902 + 1, MODULUS));
+        let new_ff = ffe_2.clone() + FFE::one();
+        assert_eq!(new_ff, FFE::new(&BigInt::from(8902 + 1), &modulus));
 
         let new_ff = FFE::one() + ffe_2;
-        assert_eq!(new_ff, FFE::new(8902 + 1, MODULUS));
+        assert_eq!(new_ff, FFE::new(&BigInt::from(8902 + 1), &modulus));
 
-        let mut ffe_3 = FFE::new(6579, MODULUS);
-        let sum = ffe_3 + ffe_1;
+        let mut ffe_3 = FFE::new(&BigInt::from(6579), &modulus);
+        let sum = ffe_3.clone() + ffe_1.clone();
         ffe_3 += ffe_1;
         assert_eq!(sum, ffe_3);
     }
 
     #[test]
     fn mul() {
-        let ffe_1 = FFE::new(1912323, MODULUS);
-        let ffe_2 = FFE::new(111091, MODULUS);
-        let new_ff = ffe_1 * ffe_2;
-        assert_eq!(new_ff, FFE::new(3062218648, MODULUS));
+        let modulus = BigInt::from(MODULUS);
 
-        let new_ff = ffe_1 * FFE::zero();
-        assert_eq!(new_ff, FFE::new(0, MODULUS));
+        let ffe_1 = FFE::new(&BigInt::from(1912323_u32), &modulus);
+        let ffe_2 = FFE::new(&BigInt::from(111091_u32), &modulus);
+        let new_ff = ffe_1.clone() * ffe_2;
+        assert_eq!(new_ff, FFE::new(&BigInt::from(3062218648_u32), &modulus));
 
-        let new_ff = FFE::zero() * ffe_1;
-        assert_eq!(new_ff, FFE::new(0, MODULUS));
+        let new_ff = ffe_1.clone() * FFE::zero();
+        assert_eq!(new_ff, FFE::new(&BigInt::zero(), &modulus));
 
-        let new_ff = ffe_1 * FFE::one();
+        let new_ff = FFE::zero() * ffe_1.clone();
+        assert_eq!(new_ff, FFE::new(&BigInt::zero(), &modulus));
+
+        let new_ff = ffe_1.clone() * FFE::one();
         assert_eq!(new_ff, ffe_1);
 
-        let new_ff = FFE::one() * ffe_1;
+        let new_ff = FFE::one() * ffe_1.clone();
         assert_eq!(new_ff, ffe_1);
 
-        let mut ffe_3 = FFE::new(59079, MODULUS);
+        let mut ffe_3 = FFE::new(&BigInt::from(59079), &modulus);
         ffe_3 *= ffe_1;
-        assert_eq!(ffe_3, FFE::new(1912323 * 59079, MODULUS));
+        assert_eq!(
+            ffe_3,
+            FFE::new(&BigInt::from(1912323_u64 * 59079_u64), &modulus)
+        );
     }
 
     #[test]
     fn sub() {
-        let ffe_1 = FFE::new(892, MODULUS);
-        let ffe_2 = FFE::new(7, MODULUS);
-        let new_ff = ffe_1 - ffe_2;
-        assert_eq!(new_ff, FFE::new(885, MODULUS));
+        let modulus = BigInt::from(MODULUS);
 
-        let ffe_3 = FFE::new(2, MODULUS);
-        let ffe_4 = FFE::new(11, MODULUS);
+        let ffe_1 = FFE::new(&BigInt::from(892), &modulus);
+        let ffe_2 = FFE::new(&BigInt::from(7), &modulus);
+
+        let new_ff = ffe_1.clone() - ffe_2;
+        assert_eq!(new_ff, FFE::new(&BigInt::from(885), &modulus));
+
+        let ffe_3 = FFE::new(&BigInt::from(2), &modulus);
+        let ffe_4 = FFE::new(&BigInt::from(11), &modulus);
         let new_ff = ffe_3 - ffe_4;
-        assert_eq!(new_ff, FFE::new(3221225464, MODULUS));
+        assert_eq!(new_ff, FFE::new(&BigInt::from(3221225464_u32), &modulus));
 
-        let new_ff = ffe_1 - FFE::zero();
-        assert_eq!(new_ff, ffe_1);
+        let new_ff = ffe_1.clone() - FFE::zero();
+        assert_eq!(new_ff, ffe_1.clone());
 
-        let new_ff = FFE::zero() - ffe_1;
-        assert_eq!(new_ff, FFE::new(-892, MODULUS));
+        let new_ff = FFE::zero() - ffe_1.clone();
+        assert_eq!(new_ff, FFE::new(&BigInt::from(-892), &modulus));
 
-        let new_ff = ffe_1 - FFE::one();
-        assert_eq!(new_ff, FFE::new(892 - 1, MODULUS));
+        let new_ff = ffe_1.clone() - FFE::one();
+        assert_eq!(new_ff, FFE::new(&BigInt::from(892 - 1), &modulus));
 
-        let new_ff = FFE::one() - ffe_1;
-        assert_eq!(new_ff, FFE::new(1 - 892, MODULUS));
+        let new_ff = FFE::one() - ffe_1.clone();
+        assert_eq!(new_ff, FFE::new(&BigInt::from(1 - 892), &modulus));
 
-        let mut ffe_5 = FFE::new(97917, MODULUS);
+        let mut ffe_5 = FFE::new(&BigInt::from(97917), &modulus);
         ffe_5 -= ffe_1;
-        assert_eq!(ffe_5, FFE::new(97917 - 892, MODULUS));
+        assert_eq!(ffe_5, FFE::new(&BigInt::from(97917 - 892), &modulus));
     }
 
     #[test]
     fn div() {
-        let ffe_1 = FFE::new(892, MODULUS);
-        let ffe_2 = FFE::new(7, MODULUS);
-        let new_ff = ffe_1 / ffe_2;
-        assert_eq!(new_ff, FFE::new(460175195, MODULUS));
+        let modulus = BigInt::from(MODULUS);
 
-        let ffe_3 = FFE::new(2, MODULUS);
-        let ffe_4 = FFE::new(11, MODULUS);
+        let ffe_1 = FFE::new(&BigInt::from(892), &modulus);
+        let ffe_2 = FFE::new(&BigInt::from(7), &modulus);
+        let new_ff = ffe_1.clone() / ffe_2.clone();
+        assert_eq!(new_ff, FFE::new(&BigInt::from(460175195), &modulus));
+
+        let ffe_3 = FFE::new(&BigInt::from(2), &modulus);
+        let ffe_4 = FFE::new(&BigInt::from(11), &modulus);
         let new_ff = ffe_3 / ffe_4;
-        assert_eq!(new_ff, FFE::new(1464193397, MODULUS));
+        assert_eq!(new_ff, FFE::new(&BigInt::from(1464193397), &modulus));
 
-        let new_ff = FFE::zero() / ffe_1;
-        assert_eq!(new_ff, FFE::new(0, MODULUS));
+        let new_ff = FFE::zero() / ffe_1.clone();
+        assert_eq!(new_ff, FFE::new(&BigInt::zero(), &modulus));
 
-        let new_ff = ffe_1 / FFE::one();
-        assert_eq!(new_ff, FFE::new(892, MODULUS));
+        let new_ff = ffe_1.clone() / FFE::one();
+        assert_eq!(new_ff, FFE::new(&BigInt::from(892), &modulus));
 
-        let new_ff = FFE::one() / ffe_1;
-        assert_eq!(new_ff, FFE::new(2350916797, MODULUS));
+        let new_ff = FFE::one() / ffe_1.clone();
+        assert_eq!(new_ff, FFE::new(&BigInt::from(2350916797_u32), &modulus));
 
-        let mut ffe_5 = FFE::new(892, MODULUS);
+        let mut ffe_5 = FFE::new(&BigInt::from(892), &modulus);
         ffe_5 /= ffe_2;
-        assert_eq!(ffe_5, FFE::new(460175195, MODULUS));
+        assert_eq!(ffe_5, FFE::new(&BigInt::from(460175195), &modulus));
+    }
+
+    #[test]
+    fn no_modulus() {
+        let zero = FFE::zero();
+        let one = FFE::one();
+
+        // 1 + 1
+        let ffe = one.clone() + one.clone();
+        assert_eq!(
+            ffe,
+            FFE {
+                element: BigInt::from(2),
+                modulus: None
+            }
+        );
+        // 0 + 0
+        let ffe = zero.clone() + zero.clone();
+        assert_eq!(
+            ffe,
+            FFE {
+                element: BigInt::zero(),
+                modulus: None
+            }
+        );
+        // 1 - 0
+        let ffe = one.clone() - zero.clone();
+        assert_eq!(
+            ffe,
+            FFE {
+                element: BigInt::one(),
+                modulus: None
+            }
+        );
+        // 0 - 1
+        let ffe = zero - one;
+        assert_eq!(
+            ffe,
+            FFE {
+                element: BigInt::from(-1),
+                modulus: None
+            }
+        )
     }
 
     #[test]
     fn pow() {
-        let ffe_1 = FFE::new(76, MODULUS);
+        let modulus = BigInt::from(MODULUS);
+
+        let ffe_1 = FFE::new(&BigInt::from(76), &modulus);
         let new_ff = ffe_1.pow(2);
-        assert_eq!(new_ff, FFE::new(5776, MODULUS));
+        assert_eq!(new_ff, FFE::new(&BigInt::from(5776), &modulus));
 
-        let ffe_2 = FFE::new(700, MODULUS);
+        let ffe_2 = FFE::new(&BigInt::from(700), &modulus);
         let new_ff = ffe_2.pow(90);
-        assert_eq!(new_ff, FFE::new(1516783203, MODULUS));
-    }
-
-    #[test]
-    fn is_order() {
-        let ffe_1 = FFE::new(13, 71);
-        let order: u128 = 70;
-        assert!(ffe_1.is_order(order));
+        assert_eq!(new_ff, FFE::new(&BigInt::from(1516783203), &modulus));
     }
 }

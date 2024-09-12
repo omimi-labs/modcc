@@ -1,3 +1,5 @@
+use num_bigint::BigInt;
+
 use crate::ff::{FiniteFieldElement, FFE};
 use crate::univariate_poly::{LagrangeInterpolationSteps, UniPoly, UnivariatePolynomial};
 
@@ -9,12 +11,16 @@ pub fn lagrange_interpolate(
     let mut new_x_values: Vec<FFE> = vec![];
     let mut new_y_values: Vec<FFE> = vec![];
     for (x, y) in x_values.iter().zip(y_values.iter()) {
-        let x_ffe = FFE::new(*x, field);
+        let x_ffe = FFE::new(&BigInt::from(*x), &BigInt::from(field));
         new_x_values.push(x_ffe);
-        let y_ffe = FFE::new(*y, field);
+        let y_ffe = FFE::new(&BigInt::from(*y), &BigInt::from(field));
         new_y_values.push(y_ffe)
     }
     let (poly, steps) = UniPoly::interpolate_xy(&new_x_values, &new_y_values);
-    let coefficients: Vec<u128> = poly.coefficients().iter().map(|&x| x.element()).collect();
+    let coefficients: Vec<u128> = poly
+        .coefficients()
+        .iter()
+        .map(|x| x.element().try_into().unwrap())
+        .collect();
     return (coefficients, steps);
 }

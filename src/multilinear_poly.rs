@@ -70,7 +70,9 @@ impl<F: FiniteFieldElement> LagrangeBasisBooleanHyperCube<F> {
     }
 }
 
-impl<F: FiniteFieldElement + Neg<Output = F>> Iterator for LagrangeBasisBooleanHyperCube<F> {
+impl<F: FiniteFieldElement + Clone + Neg<Output = F>> Iterator
+    for LagrangeBasisBooleanHyperCube<F>
+{
     type Item = Vec<UniPoly<F>>;
 
     fn next(&mut self) -> Option<Self::Item> {
@@ -80,16 +82,16 @@ impl<F: FiniteFieldElement + Neg<Output = F>> Iterator for LagrangeBasisBooleanH
 
         // convert the current index to binary value of the given length
         let index_as_binary = binary_string(self.current_point, self.bit_size);
-        let check_zero = UniPoly::<F>::new(vec![F::zero(), F::one()]);
         let minus_one = -F::one();
-        let check_one = UniPoly::<F>::new(vec![F::one(), minus_one]);
+        let check_zero_poly = UniPoly::<F>::new(vec![F::one(), minus_one]);
+        let check_one_poly = UniPoly::<F>::new(vec![F::zero(), F::one()]);
         let point = index_as_binary
             .chars()
             .map(|a| {
                 if a == '1' {
-                    check_one.clone()
+                    check_one_poly.clone()
                 } else {
-                    check_zero.clone()
+                    check_zero_poly.clone()
                 }
             })
             .collect::<Vec<UniPoly<F>>>();
@@ -190,51 +192,95 @@ mod tests {
 
     #[test]
     fn test_lagrange_basis_boolean_hypercube_iteration() {
+        let minus_one = -FFE::one();
+        let check_zero_poly = UniPoly::<FFE>::new(vec![FFE::one(), minus_one]);
+        let check_one_poly = UniPoly::<FFE>::new(vec![FFE::zero(), FFE::one()]);
         let mut two_bit_iterator = LagrangeBasisBooleanHyperCube::<FFE>::new(2);
         assert_eq!(two_bit_iterator.total_points, 4);
-        // assert_eq!(
-        //     two_bit_iterator.next(),
-        //     Some(vec![UniPoly::<FFE>::one(); 2])
-        // );
-        // assert_eq!(two_bit_iterator.next(), Some(vec![FFE::zero(), FFE::one()]));
-        // assert_eq!(two_bit_iterator.next(), Some(vec![FFE::one(), FFE::zero()]));
-        // assert_eq!(two_bit_iterator.next(), Some(vec![FFE::one(); 2]));
-        // assert_eq!(two_bit_iterator.next(), None);
+        assert_eq!(
+            two_bit_iterator.next(),
+            Some(vec![check_zero_poly.clone(), check_zero_poly.clone()])
+        );
+        assert_eq!(
+            two_bit_iterator.next(),
+            Some(vec![check_zero_poly.clone(), check_one_poly.clone()])
+        );
+        assert_eq!(
+            two_bit_iterator.next(),
+            Some(vec![check_one_poly.clone(), check_zero_poly.clone()])
+        );
+        assert_eq!(
+            two_bit_iterator.next(),
+            Some(vec![check_one_poly.clone(), check_one_poly.clone()])
+        );
+        assert_eq!(two_bit_iterator.next(), None);
 
-        // let mut three_bit_iterator = BooleanHyperCube::<FFE>::new(3);
-        // assert_eq!(three_bit_iterator.total_points, 8);
-        // assert_eq!(
-        //     three_bit_iterator.next(),
-        //     Some(vec![FFE::zero(), FFE::zero(), FFE::zero()])
-        // );
-        // assert_eq!(
-        //     three_bit_iterator.next(),
-        //     Some(vec![FFE::zero(), FFE::zero(), FFE::one()])
-        // );
-        // assert_eq!(
-        //     three_bit_iterator.next(),
-        //     Some(vec![FFE::zero(), FFE::one(), FFE::zero()])
-        // );
-        // assert_eq!(
-        //     three_bit_iterator.next(),
-        //     Some(vec![FFE::zero(), FFE::one(), FFE::one()])
-        // );
-        // assert_eq!(
-        //     three_bit_iterator.next(),
-        //     Some(vec![FFE::one(), FFE::zero(), FFE::zero()])
-        // );
-        // assert_eq!(
-        //     three_bit_iterator.next(),
-        //     Some(vec![FFE::one(), FFE::zero(), FFE::one()])
-        // );
-        // assert_eq!(
-        //     three_bit_iterator.next(),
-        //     Some(vec![FFE::one(), FFE::one(), FFE::zero()])
-        // );
-        // assert_eq!(
-        //     three_bit_iterator.next(),
-        //     Some(vec![FFE::one(), FFE::one(), FFE::one()])
-        // );
-        // assert_eq!(three_bit_iterator.next(), None);
+        let mut three_bit_iterator = LagrangeBasisBooleanHyperCube::<FFE>::new(3);
+        assert_eq!(three_bit_iterator.total_points, 8);
+        assert_eq!(
+            three_bit_iterator.next(),
+            Some(vec![
+                check_zero_poly.clone(),
+                check_zero_poly.clone(),
+                check_zero_poly.clone()
+            ])
+        );
+        assert_eq!(
+            three_bit_iterator.next(),
+            Some(vec![
+                check_zero_poly.clone(),
+                check_zero_poly.clone(),
+                check_one_poly.clone()
+            ])
+        );
+        assert_eq!(
+            three_bit_iterator.next(),
+            Some(vec![
+                check_zero_poly.clone(),
+                check_one_poly.clone(),
+                check_zero_poly.clone()
+            ])
+        );
+        assert_eq!(
+            three_bit_iterator.next(),
+            Some(vec![
+                check_zero_poly.clone(),
+                check_one_poly.clone(),
+                check_one_poly.clone()
+            ])
+        );
+        assert_eq!(
+            three_bit_iterator.next(),
+            Some(vec![
+                check_one_poly.clone(),
+                check_zero_poly.clone(),
+                check_zero_poly.clone()
+            ])
+        );
+        assert_eq!(
+            three_bit_iterator.next(),
+            Some(vec![
+                check_one_poly.clone(),
+                check_zero_poly.clone(),
+                check_one_poly.clone()
+            ])
+        );
+        assert_eq!(
+            three_bit_iterator.next(),
+            Some(vec![
+                check_one_poly.clone(),
+                check_one_poly.clone(),
+                check_zero_poly
+            ])
+        );
+        assert_eq!(
+            three_bit_iterator.next(),
+            Some(vec![
+                check_one_poly.clone(),
+                check_one_poly.clone(),
+                check_one_poly
+            ])
+        );
+        assert_eq!(three_bit_iterator.next(), None);
     }
 }

@@ -45,16 +45,15 @@ async fn main() -> std::io::Result<()> {
     println!("Server is running");
 
     HttpServer::new(move || {
-        App::new()
-            .wrap(
-                Cors::default()
-                    .allowed_origin("http://localhost:3000") // Specify your Next.js app's origin
-                    .allowed_methods(vec!["GET", "POST"])
-                    .allowed_headers(vec![http::header::AUTHORIZATION, http::header::ACCEPT])
-                    .allowed_header(http::header::CONTENT_TYPE)
-                    .max_age(3600),
-            )
-            .service(lagrange_interpolation_over_ff)
+        App::new().wrap(
+            Cors::default()
+                .allowed_origin("http://localhost:3000") // Specify your Next.js app's origin
+                .allowed_methods(vec!["GET", "POST"])
+                .allowed_headers(vec![http::header::AUTHORIZATION, http::header::ACCEPT])
+                .allowed_header(http::header::CONTENT_TYPE)
+                .max_age(3600),
+        )
+        // .service(lagrange_interpolation_over_ff)
     })
     .bind(("127.0.0.1", port))?
     .workers(2)
