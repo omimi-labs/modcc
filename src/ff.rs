@@ -3,7 +3,7 @@ use num_traits::One;
 use num_traits::Zero;
 use std::{
     fmt::Debug,
-    ops::{Add, AddAssign, Div, DivAssign, Mul, MulAssign, Neg, Rem, Sub, SubAssign},
+    ops::{Add, AddAssign, Div, DivAssign, Mul, MulAssign, Neg, Sub, SubAssign},
     u128,
 };
 
