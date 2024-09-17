@@ -23,7 +23,18 @@ struct LagrangeInterpolationResponse {
     steps: LagrangeInterpolationSteps,
 }
 
-#[post("/lf/")]
+#[derive(Debug, Deserialize)]
+struct MultilinearOverBooleanHypercubeRequest {
+    y_values: Vec<i128>,
+    field: usize,
+}
+
+#[derive(Debug, Serialize)]
+struct MultilinearOverBooleanHypercubeResponse {
+    coefficients: Vec<(usize, usize)>,
+}
+
+#[post("/lagrange_interpolation/")]
 async fn lagrange_interpolation_over_ff(
     json: web::Json<LagrangeInterpolationRequest>,
 ) -> impl Responder {
@@ -36,6 +47,20 @@ async fn lagrange_interpolation_over_ff(
         coefficients,
         steps,
     };
+    HttpResponse::Ok().json(response)
+}
+
+#[post("/mf/")]
+async fn multilinear_interpolation_over_boolean_hypercube(
+    json: web::Json<MultilinearOverBooleanHypercubeRequest>,
+) -> impl Responder {
+    let y_values = &json.y_values;
+    let field = json.field;
+    let coefficients = multilinear_interpolation::multilinear_interpolate_over_boolean_hypercube(
+        y_values,
+        field as u128,
+    );
+    let response = MultilinearOverBooleanHypercubeResponse { coefficients };
     HttpResponse::Ok().json(response)
 }
 

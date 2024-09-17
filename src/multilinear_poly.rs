@@ -17,9 +17,12 @@ pub trait Polynomial<F>: Sized {
     fn zero() -> Self;
 
     fn one() -> Self;
+
+    fn coefficients(&self) -> &BTreeMap<usize, F>;
 }
 
 pub trait MultilinearPolynomial<F>: Polynomial<F> {
+    fn scalar_mul(&mut self, scalar: F);
     fn interpolate(y_values: &Vec<F>) -> Self;
 }
 
@@ -55,11 +58,21 @@ impl<F: FiniteFieldElement> Polynomial<F> for MultilinearPoly<F> {
         coefficients.insert(0, F::one());
         Self::new(0, coefficients)
     }
+
+    fn coefficients(&self) -> &BTreeMap<usize, F> {
+        &self.coefficients
+    }
 }
 
 impl<F: FiniteFieldElement + Clone + Neg<Output = F> + Add<Output = F>> MultilinearPolynomial<F>
     for MultilinearPoly<F>
 {
+    fn scalar_mul(&mut self, scalar: F) {
+        for value in self.coefficients.values_mut() {
+            *value *= scalar.clone()
+        }
+    }
+
     fn interpolate(y_values: &Vec<F>) -> Self {
         let next_power_of_two = y_values.len().next_power_of_two();
         let bit_size = next_power_of_two
@@ -68,17 +81,20 @@ impl<F: FiniteFieldElement + Clone + Neg<Output = F> + Add<Output = F>> Multilin
             .log2()
             .to_usize()
             .unwrap();
-        let mut bit_iterator = LagrangeBasisBooleanHyperCube::<F>::new(bit_size);
-        let result = Self::zero();
-        for vec_of_poly in bit_iterator {
+        let mut evaluations = y_values.clone();
+        evaluations.resize(next_power_of_two, F::one());
+        let bit_iterator = LagrangeBasisBooleanHyperCube::<F>::new(bit_size);
+        let mut result = Self::zero();
+        for (vec_of_poly, y_value) in bit_iterator.zip(evaluations.iter()) {
             let mut inter_poly = Self::one();
             for poly in vec_of_poly.iter() {
-                let res = &inter_poly + poly;
+                let res = &inter_poly * poly;
                 inter_poly = res;
             }
-            // result = result + inter_poly;
+            inter_poly.scalar_mul(y_value.clone());
+            result = &result + &inter_poly;
         }
-        todo!()
+        result
     }
 }
 
@@ -225,7 +241,9 @@ impl<F: FiniteFieldElement + Clone + Neg<Output = F>> Iterator
 mod tests {
     use std::collections::BTreeMap;
 
-    use super::{MultilinearPoly, Polynomial};
+    use num_bigint::BigInt;
+
+    use super::{MultilinearPoly, MultilinearPolynomial, Polynomial};
     use crate::ff::{FiniteFieldElement, FFE};
     use crate::multilinear_poly::LagrangeBasisBooleanHyperCube;
 
@@ -332,26 +350,33 @@ mod tests {
     }
 
     #[test]
-    fn test_mul() {
-        let mut check_one_coeffs = BTreeMap::new();
-        check_one_coeffs.insert(0, FFE::zero());
-        check_one_coeffs.insert(1, FFE::one());
-        let check_one = MultilinearPoly::new(1, check_one_coeffs);
+    fn test_interpolate() {
+        let modulus = BigInt::from(17);
+        // x + y + z + 7
+        let evaluations = vec![
+            FFE::new(&BigInt::from(7), &modulus),
+            FFE::new(&BigInt::from(8), &modulus),
+            FFE::new(&BigInt::from(8), &modulus),
+            FFE::new(&BigInt::from(9), &modulus),
+            FFE::new(&BigInt::from(8), &modulus),
+            FFE::new(&BigInt::from(9), &modulus),
+            FFE::new(&BigInt::from(9), &modulus),
+            FFE::new(&BigInt::from(10), &modulus),
+        ];
+        let poly = MultilinearPoly::interpolate(&evaluations);
 
-        let mut check_zero_coeffs = BTreeMap::new();
-        let minus_one = -FFE::one();
-        check_zero_coeffs.insert(0, FFE::one());
-        check_zero_coeffs.insert(1, minus_one);
-        let check_zero = MultilinearPoly::new(1, check_zero_coeffs);
+        let num_of_vars = 3;
+        let mut coefficients = BTreeMap::new();
+        coefficients.insert(0, FFE::new(&BigInt::from(7), &modulus));
+        coefficients.insert(1, FFE::new(&BigInt::from(1), &modulus));
+        coefficients.insert(2, FFE::new(&BigInt::from(1), &modulus));
+        coefficients.insert(4, FFE::new(&BigInt::from(1), &modulus));
+        coefficients.insert(3, FFE::new(&BigInt::from(0), &modulus));
+        coefficients.insert(5, FFE::new(&BigInt::from(0), &modulus));
+        coefficients.insert(6, FFE::new(&BigInt::from(0), &modulus));
+        coefficients.insert(7, FFE::new(&BigInt::from(0), &modulus));
 
-        let multi_poly_1 = &check_zero * &check_zero;
-
-        let multi_poly_2 = &check_zero * &check_one;
-
-        let multi_poly_3 = &check_one * &check_zero;
-
-        let multi_poly_4 = &check_one * &check_one;
-
-        let multi_poly_5 = &check_zero * &multi_poly_1;
+        let expected_poly = MultilinearPoly::new(num_of_vars, coefficients);
+        assert_eq!(poly, expected_poly);
     }
 }
