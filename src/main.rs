@@ -4,6 +4,7 @@ mod multilinear_interpolation;
 mod multilinear_poly;
 mod univariate_poly;
 
+use multilinear_poly::MultilinearLagrangeInterpolationSteps;
 use univariate_poly::LagrangeInterpolationSteps;
 
 use actix_cors::Cors;
@@ -32,6 +33,7 @@ struct MultilinearOverBooleanHypercubeRequest {
 #[derive(Debug, Serialize)]
 struct MultilinearOverBooleanHypercubeResponse {
     coefficients: Vec<(usize, usize)>,
+    steps: MultilinearLagrangeInterpolationSteps,
 }
 
 #[post("/lagrange_interpolation/")]
@@ -56,11 +58,15 @@ async fn multilinear_interpolation_over_boolean_hypercube(
 ) -> impl Responder {
     let y_values = &json.y_values;
     let field = json.field;
-    let coefficients = multilinear_interpolation::multilinear_interpolate_over_boolean_hypercube(
-        y_values,
-        field as u128,
-    );
-    let response = MultilinearOverBooleanHypercubeResponse { coefficients };
+    let (coefficients, steps) =
+        multilinear_interpolation::multilinear_interpolate_over_boolean_hypercube(
+            y_values,
+            field as u128,
+        );
+    let response = MultilinearOverBooleanHypercubeResponse {
+        coefficients,
+        steps,
+    };
     HttpResponse::Ok().json(response)
 }
 

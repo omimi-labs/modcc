@@ -101,7 +101,7 @@ pub struct LagrangeInterpolationSteps {
 }
 
 impl LagrangeInterpolationSteps {
-    pub fn add_y_values(&mut self, y_values: Vec<u128>) {
+    fn add_y_values(&mut self, y_values: Vec<u128>) {
         self.y_values = y_values;
     }
 
