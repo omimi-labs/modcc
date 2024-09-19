@@ -69,7 +69,7 @@ impl<F: FiniteFieldElement + Clone + Neg<Output = F> + Add<Output = F>> Multilin
 {
     fn scalar_mul(&mut self, scalar: F) {
         for value in self.coefficients.values_mut() {
-            *value *= scalar.clone()
+            *value *= scalar.clone();
         }
     }
 
@@ -82,7 +82,7 @@ impl<F: FiniteFieldElement + Clone + Neg<Output = F> + Add<Output = F>> Multilin
             .to_usize()
             .unwrap();
         let mut evaluations = y_values.clone();
-        evaluations.resize(next_power_of_two, F::one());
+        evaluations.resize(next_power_of_two, F::zero());
         let bit_iterator = LagrangeBasisBooleanHyperCube::<F>::new(bit_size);
         let mut result = Self::zero();
         for (vec_of_poly, y_value) in bit_iterator.zip(evaluations.iter()) {
@@ -92,6 +92,7 @@ impl<F: FiniteFieldElement + Clone + Neg<Output = F> + Add<Output = F>> Multilin
                 inter_poly = res;
             }
             inter_poly.scalar_mul(y_value.clone());
+            println!("{:?} {:?}", inter_poly, y_value);
             result = &result + &inter_poly;
         }
         result

@@ -50,7 +50,7 @@ async fn lagrange_interpolation_over_ff(
     HttpResponse::Ok().json(response)
 }
 
-#[post("/mf/")]
+#[post("/multilinear_interpolation_over_boolean_hypercube/")]
 async fn multilinear_interpolation_over_boolean_hypercube(
     json: web::Json<MultilinearOverBooleanHypercubeRequest>,
 ) -> impl Responder {
@@ -80,6 +80,7 @@ async fn main() -> std::io::Result<()> {
                     .max_age(3600),
             )
             .service(lagrange_interpolation_over_ff)
+            .service(multilinear_interpolation_over_boolean_hypercube)
     })
     .bind(("127.0.0.1", port))?
     .workers(2)

@@ -108,8 +108,8 @@ enum Ops {
 
 fn perform_mod_operation(op: Ops, a: &BigInt, b: &BigInt, n: &BigInt) -> BigInt {
     match op {
-        Ops::ADD => (a + b) % n,
-        Ops::MUL => (a * b) % n,
+        Ops::ADD => ((a + b) + n) % n,
+        Ops::MUL => ((a * b) + n) % n,
         Ops::SUB => ((a - b) + n) % n,
     }
 }
