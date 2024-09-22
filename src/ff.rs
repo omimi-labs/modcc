@@ -20,6 +20,7 @@ pub trait FiniteFieldElement:
     + MulAssign
     + DivAssign
     + Neg
+    + Default
 {
     fn new(element: &BigInt, modulus: &BigInt) -> Self;
 

@@ -2,6 +2,8 @@ mod ff;
 mod lagrange_interpolation;
 mod multilinear_interpolation;
 mod multilinear_poly;
+mod multivariate_interpolation;
+mod multivariate_poly;
 mod univariate_poly;
 
 use multilinear_poly::MultilinearLagrangeInterpolationSteps;
