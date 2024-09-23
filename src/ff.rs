@@ -32,6 +32,10 @@ pub trait FiniteFieldElement:
 
     fn one() -> Self;
 
+    fn is_zero(&self) -> bool;
+
+    fn is_one(&self) -> bool;
+
     fn inverse(&self) -> Option<Self>;
 
     fn pow(&self, n: u128) -> Self;
@@ -72,6 +76,14 @@ impl FiniteFieldElement for FFE {
             element: BigInt::one(),
             modulus: None,
         }
+    }
+
+    fn is_zero(&self) -> bool {
+        self.element.is_zero()
+    }
+
+    fn is_one(&self) -> bool {
+        self.element.is_one()
     }
 
     fn inverse(&self) -> Option<Self> {
