@@ -128,7 +128,7 @@ async fn main() -> std::io::Result<()> {
             .wrap(
                 Cors::default()
                     .allowed_origin("https://modccxyz.vercel.app/") // Specify your Next.js app's origin
-                    .allowed_methods(vec!["GET", "POST"])
+                    .allowed_methods(vec!["POST"])
                     .allowed_headers(vec![http::header::AUTHORIZATION, http::header::ACCEPT])
                     .allowed_header(http::header::CONTENT_TYPE)
                     .max_age(3600),
