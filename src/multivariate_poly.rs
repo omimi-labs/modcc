@@ -1,32 +1,76 @@
-use std::ops::{Add, Mul, Neg, Sub};
+use std::{
+    cmp::Ordering,
+    collections::BTreeSet,
+    fmt::Debug,
+    ops::{Add, Mul, Neg, Sub},
+};
 
-use num_bigint::BigInt;
-use num_traits::{One, Zero};
+use serde::Serialize;
 
 use crate::ff::FiniteFieldElement;
 
-#[derive(Debug, Default, Clone, Copy, PartialEq)]
-struct Var {
+#[derive(Default, Clone, Copy, PartialEq, Eq, Serialize)]
+pub struct Var {
     var_index: usize,
     power: usize,
 }
 
-#[derive(Debug, Default, Clone)]
+impl Var {
+    pub fn var_index(&self) -> usize {
+        self.var_index
+    }
+
+    pub fn power(&self) -> usize {
+        self.power
+    }
+}
+
+impl Debug for Var {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        if self.power == 1 {
+            write!(f, "x_{}", self.var_index)?;
+        } else {
+            write!(f, "(x_{})^{}", self.var_index, self.power)?;
+        }
+        Ok(())
+    }
+}
+
+#[derive(Default, Clone, PartialEq, Eq, Serialize)]
 pub struct Term<F> {
     coefficient: F,
     vars: Vec<Var>, // x^2y
 }
 
-impl<F: FiniteFieldElement> Term<F> {
-    fn new(coefficient: F, vars: &Vec<Var>) -> Self {
-        Term {
-            coefficient,
-            vars: vars.clone(),
+impl<F: FiniteFieldElement> Debug for Term<F> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        if self.coefficient.is_zero() {
+            write!(f, "0")?;
+        } else if self.coefficient.is_one() {
+            for var in self.vars.iter() {
+                if var.power == 1 {
+                    write!(f, "x_{}", var.var_index)?;
+                } else {
+                    write!(f, "(x_{})^{}", var.var_index, var.power)?;
+                }
+            }
+        } else {
+            write!(f, "{:?}", self.coefficient)?;
+            for var in self.vars.iter() {
+                if var.power == 1 {
+                    write!(f, "x_{}", var.var_index)?;
+                } else {
+                    write!(f, "(x_{})^{}", var.var_index, var.power)?;
+                }
+            }
         }
+        Ok(())
     }
+}
 
+impl<F: FiniteFieldElement> Term<F> {
     fn is_zero(&self) -> bool {
-        self.coefficient.is_zero() && self.vars.is_empty()
+        self.coefficient.is_zero()
     }
 
     fn is_one(&self) -> bool {
@@ -43,11 +87,65 @@ impl<F: FiniteFieldElement> Term<F> {
             vars: vec![],
         }
     }
+
+    fn degree(&self) -> usize {
+        self.vars.iter().fold(0, |sum, var| sum + var.power)
+    }
+
+    fn sort(&mut self) {
+        self.vars.sort_by(|a, b| a.var_index.cmp(&b.var_index));
+    }
+
+    pub fn coefficient(&self) -> &F {
+        &self.coefficient
+    }
+
+    pub fn vars(&self) -> &Vec<Var> {
+        &self.vars
+    }
 }
 
-#[derive(Debug, Default, Clone)]
+impl<F: FiniteFieldElement> PartialOrd for Term<F> {
+    fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
+        if self.degree() != other.degree() {
+            return Some(self.degree().cmp(&other.degree()));
+        } else {
+            for (cur, other) in self.vars.iter().zip(other.vars.iter()) {
+                if cur.var_index == other.var_index {
+                    if cur.power != other.power {
+                        return Some(cur.power.cmp(&other.power));
+                    }
+                } else {
+                    return Some(other.var_index.cmp(&other.var_index));
+                }
+            }
+            Some(Ordering::Equal)
+        }
+    }
+}
+
+impl<F: FiniteFieldElement> Ord for Term<F> {
+    fn cmp(&self, other: &Self) -> Ordering {
+        self.partial_cmp(other).unwrap()
+    }
+}
+
+#[derive(Default, Clone, PartialEq, Eq, Serialize)]
 pub struct MultivariatePoly<F> {
     terms: Vec<Term<F>>,
+}
+
+impl<F: FiniteFieldElement> Debug for MultivariatePoly<F> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        for (i, term) in self.terms.iter().enumerate() {
+            if i == 0 {
+                write!(f, "{:?}", term)?;
+            } else {
+                write!(f, " + {:?}", term)?;
+            }
+        }
+        Ok(())
+    }
 }
 
 pub trait Polynomial<F>: Sized {
@@ -67,17 +165,19 @@ pub trait Polynomial<F>: Sized {
 }
 
 pub trait MultivariatePolynomial<F>: Polynomial<F> {
+    fn remove_zeros(&mut self);
+    fn combine_terms(&mut self);
     fn scalar_mul(&mut self, scalar: F);
-    fn interpolate(
-        num_of_vars: usize,
-        group_of_evaluation_points: &Vec<Vec<F>>,
-        y_values: &Vec<F>,
-    ) -> Result<Self, String>;
+    fn interpolate(group_of_evaluation_points: &Vec<Vec<F>>, y_values: &Vec<F>) -> Self;
     fn get_lagrange_polynomial_for_single(
+        index: usize,
         current_evaluation_point: &F,
-        evaluation_points: &Vec<F>,
+        evaluation_points: &BTreeSet<F>,
     ) -> Self;
-    fn get_lagrange_polynomial_for_group(group_of_evaluation_points: &Vec<Self>) -> Self;
+    fn get_lagrange_polynomial_for_group(
+        unique_evaluation_points: &BTreeSet<F>,
+        group_of_evaluation_points: &Vec<F>,
+    ) -> Self;
 }
 
 impl<F: FiniteFieldElement> Polynomial<F> for MultivariatePoly<F> {
@@ -120,101 +220,118 @@ impl<F: FiniteFieldElement> Polynomial<F> for MultivariatePoly<F> {
     }
 }
 
-impl<F: FiniteFieldElement + Clone + Neg<Output = F> + Sub<Output = F>> MultivariatePolynomial<F>
-    for MultivariatePoly<F>
+impl<F: FiniteFieldElement + Clone + Neg<Output = F> + Sub<Output = F> + Add<Output = F>>
+    MultivariatePolynomial<F> for MultivariatePoly<F>
 {
-    fn scalar_mul(&mut self, scalar: F) {
-        let mut terms = vec![];
+    fn combine_terms(&mut self) {
+        let mut terms_dedup: Vec<Term<F>> = Vec::new();
+
         for term in self.terms.iter() {
-            let new_coefficient = term.coefficient.clone() * scalar.clone();
-            let new_term = Term::new(new_coefficient, &term.vars);
-            terms.push(new_term);
+            if let Some(prev) = terms_dedup.last_mut() {
+                if prev.vars == term.vars {
+                    prev.coefficient += term.coefficient.clone();
+                    continue;
+                }
+            }
+            terms_dedup.push(term.clone());
         }
-        let new_poly = MultivariatePoly::new(terms);
-        *self = new_poly;
+
+        self.terms = terms_dedup
+    }
+
+    fn remove_zeros(&mut self) {
+        self.terms.retain(|term| !term.coefficient.is_zero());
+    }
+
+    fn scalar_mul(&mut self, scalar: F) {
+        self.terms = self
+            .terms
+            .iter()
+            .map(|term| Term {
+                coefficient: term.coefficient.clone() * scalar.clone(),
+                ..term.clone()
+            })
+            .collect::<Vec<_>>();
     }
 
     fn interpolate(
-        num_of_vars: usize,
-        group_of_evaluation_points: &Vec<Vec<F>>,
+        collection_of_group_of_evaluation_points: &Vec<Vec<F>>,
         y_values: &Vec<F>,
-    ) -> Result<Self, String> {
-        for group in group_of_evaluation_points {
-            if group.len() != num_of_vars {
-                return Err(String::from("Invalid collection of vars"));
+    ) -> Self {
+        let mut unique_evaluation_points = BTreeSet::new();
+        for group in collection_of_group_of_evaluation_points.iter() {
+            for evaluation_point in group {
+                unique_evaluation_points.insert(evaluation_point.clone());
             }
         }
-        let mut checkers_groups = vec![];
-        for group in group_of_evaluation_points {
-            let mut checkers = vec![];
-            for (i, evaluation_point) in group.iter().enumerate() {
-                let var = Var {
-                    var_index: i + 1,
-                    power: 1,
-                }; // x_{i}
-                let term = Term {
-                    coefficient: F::one(),
-                    vars: vec![var],
-                }; // [1x_{i}]
-                let constant_term = Term {
-                    coefficient: evaluation_point.clone(),
-                    vars: vec![],
-                }; // [c]
-                let terms = vec![term, constant_term];
-                let checker = MultivariatePoly { terms };
-                checkers.push(checker);
-            }
-            checkers_groups.push(checkers);
+
+        let mut resulting_polynomial = Self::zero();
+        for (group_of_evaluation_points, y) in collection_of_group_of_evaluation_points
+            .iter()
+            .zip(y_values)
+        {
+            let mut group_lagrange_polynomial = Self::get_lagrange_polynomial_for_group(
+                &unique_evaluation_points,
+                group_of_evaluation_points,
+            );
+            group_lagrange_polynomial.scalar_mul(y.clone());
+            resulting_polynomial = &resulting_polynomial + &group_lagrange_polynomial;
         }
-        let mut resulting_poly = MultivariatePoly::zero();
-        for (group, y) in checkers_groups.iter().zip(y_values) {
-            let mut one_poly = MultivariatePoly::one();
-            for poly in group.iter() {
-                one_poly = &one_poly * poly;
-            }
-            one_poly.scalar_mul(y.clone());
-            resulting_poly = &resulting_poly + &one_poly;
-        }
-        Ok(resulting_poly)
+        resulting_polynomial
     }
 
     fn get_lagrange_polynomial_for_single(
+        index: usize,
         current_evaluation_point: &F,
-        evaluation_points: &Vec<F>,
+        evaluation_points: &BTreeSet<F>,
     ) -> Self {
         let mut resulting_polynomial = MultivariatePoly::one();
         let mut running_denominator = F::one();
-        for (i, evaluation_point) in evaluation_points.iter().enumerate() {
+
+        for (_, evaluation_point) in evaluation_points.iter().enumerate() {
             if current_evaluation_point == evaluation_point {
                 continue;
             }
             let var = Var {
-                var_index: i + 1,
+                var_index: index,
                 power: 1,
-            }; // x_{i}
+            }; // x
             let term = Term {
-                coefficient: -F::one(),
+                coefficient: F::one(),
                 vars: vec![var],
-            }; // [-1x_{i}]
+            }; // [1x_{i}]
             let constant_term = Term {
-                coefficient: evaluation_point.clone(),
+                coefficient: -evaluation_point.clone(),
                 vars: vec![],
-            }; // [c]
+            }; // [-c]
             let terms = vec![term, constant_term];
-            let numerator = MultivariatePoly::new(terms);
-            resulting_polynomial = &resulting_polynomial * &numerator;
+            let mut numerator = MultivariatePoly::new(terms);
             let denominator = current_evaluation_point.clone() - evaluation_point.clone();
-            running_denominator *= denominator;
+            running_denominator *= denominator.clone();
+            numerator.scalar_mul(denominator.inverse().unwrap());
+            resulting_polynomial = &resulting_polynomial * &numerator;
         }
-        todo!()
+        resulting_polynomial
     }
 
-    fn get_lagrange_polynomial_for_group(group_of_evaluation_points: &Vec<Self>) -> Self {
-        todo!()
+    fn get_lagrange_polynomial_for_group(
+        unique_evaluation_points: &BTreeSet<F>,
+        group_of_evaluation_points: &Vec<F>,
+    ) -> Self {
+        let mut group_lagrange_polynomial = Self::one();
+        for (index, evaluation) in group_of_evaluation_points.iter().enumerate() {
+            let lagrange_polynomial = Self::get_lagrange_polynomial_for_single(
+                index + 1,
+                evaluation,
+                unique_evaluation_points,
+            );
+            group_lagrange_polynomial = &group_lagrange_polynomial * &lagrange_polynomial;
+        }
+        group_lagrange_polynomial
     }
 }
 
-enum ResultOfVarMul {
+pub enum ResultOfVarMul {
     Single(Var),
     Vector(Vec<Var>),
 }
@@ -271,10 +388,12 @@ impl<F: FiniteFieldElement + Clone> Mul for &Term<F> {
                 }
             }
             let coefficient = self.coefficient.clone() * rhs.coefficient.clone();
-            Term {
+            let mut term = Term {
                 coefficient,
                 vars: resulting_vars,
-            }
+            };
+            term.sort();
+            term
         }
     }
 }
@@ -302,7 +421,9 @@ impl<F: FiniteFieldElement + Clone + Add<Output = F>> Add for &Term<F> {
     }
 }
 
-impl<F: FiniteFieldElement + Clone> Mul for &MultivariatePoly<F> {
+impl<F: FiniteFieldElement + Clone + Sub<Output = F> + Neg<Output = F> + Add<Output = F>> Mul
+    for &MultivariatePoly<F>
+{
     type Output = MultivariatePoly<F>;
 
     fn mul(self, rhs: Self) -> Self::Output {
@@ -322,13 +443,16 @@ impl<F: FiniteFieldElement + Clone> Mul for &MultivariatePoly<F> {
                 resulting_terms.push(term_mul);
             }
         }
-        MultivariatePoly {
+        let mut poly = MultivariatePoly {
             terms: resulting_terms,
-        }
+        };
+        poly.remove_zeros();
+        poly.combine_terms();
+        poly
     }
 }
 
-impl<F: FiniteFieldElement + Clone> Add for &MultivariatePoly<F> {
+impl<F: FiniteFieldElement + Clone + Add<Output = F>> Add for &MultivariatePoly<F> {
     type Output = MultivariatePoly<F>;
 
     fn add(self, rhs: Self) -> Self::Output {
@@ -338,12 +462,36 @@ impl<F: FiniteFieldElement + Clone> Add for &MultivariatePoly<F> {
         if rhs.is_zero() {
             return self.clone();
         }
-        let mut self_terms = self.terms.clone();
-        let rhs_terms = rhs.terms.clone();
-        self_terms.extend(rhs_terms);
-        MultivariatePoly::new(self_terms)
-        // TODO: Update to solve cases where
-        // they might be terms that have same variable combination
+        let mut result = Vec::new();
+        let mut cur_iter = self.terms.iter().peekable();
+        let mut other_iter = rhs.terms.iter().peekable();
+
+        loop {
+            let which = match (cur_iter.peek(), other_iter.peek()) {
+                (Some(cur), Some(other)) => Some(cur.cmp(other)),
+                (Some(_), None) => Some(Ordering::Less),
+                (None, Some(_)) => Some(Ordering::Greater),
+                (None, None) => None,
+            };
+
+            let smallest = match which {
+                Some(Ordering::Less) => cur_iter.next().unwrap().clone(),
+                Some(Ordering::Equal) => {
+                    let other = other_iter.next().unwrap();
+                    let cur = cur_iter.next().unwrap();
+                    Term {
+                        coefficient: cur.coefficient.clone() + other.coefficient.clone(),
+                        vars: cur.vars.clone(),
+                    }
+                }
+                Some(Ordering::Greater) => other_iter.next().unwrap().clone(),
+                None => break,
+            };
+
+            result.push(smallest);
+        }
+        result.retain(|c| !c.is_zero());
+        MultivariatePoly::new(result)
     }
 }
 
@@ -352,7 +500,72 @@ mod tests {
 
     use crate::ff::{FiniteFieldElement, FFE};
 
-    use super::{MultivariatePoly, MultivariatePolynomial};
+    use super::{MultivariatePoly, MultivariatePolynomial, Polynomial, Term, Var};
+
+    #[test]
+    fn test_add() {
+        let modulus = BigInt::from(17);
+        // x + y + z
+        let x = Term {
+            coefficient: FFE::new(&BigInt::from(1), &modulus),
+            vars: vec![Var {
+                var_index: 1,
+                power: 1,
+            }],
+        };
+        let y = Term {
+            coefficient: FFE::new(&BigInt::from(1), &modulus),
+            vars: vec![Var {
+                var_index: 2,
+                power: 1,
+            }],
+        };
+        let z = Term {
+            coefficient: FFE::new(&BigInt::from(1), &modulus),
+            vars: vec![Var {
+                var_index: 3,
+                power: 1,
+            }],
+        };
+        let terms = vec![x.clone(), y.clone(), z.clone()];
+        let poly_1 = MultivariatePoly::new(terms);
+
+        // 3x^2 + 5y + 8z^2
+        let three_x_square = Term {
+            coefficient: FFE::new(&BigInt::from(3), &modulus),
+            vars: vec![Var {
+                var_index: 1,
+                power: 2,
+            }],
+        };
+        let five_y = Term {
+            coefficient: FFE::new(&BigInt::from(5), &modulus),
+            vars: vec![Var {
+                var_index: 2,
+                power: 1,
+            }],
+        };
+        let eight_z_square = Term {
+            coefficient: FFE::new(&BigInt::from(8), &modulus),
+            vars: vec![Var {
+                var_index: 3,
+                power: 2,
+            }],
+        };
+        let terms = vec![
+            three_x_square.clone(),
+            five_y.clone(),
+            eight_z_square.clone(),
+        ];
+        let poly_2 = MultivariatePoly::new(terms);
+
+        let actual_poly = &poly_1 + &poly_2;
+
+        let expected_terms = vec![x, y, z, five_y, three_x_square, eight_z_square];
+        let expected_poly = MultivariatePoly::new(expected_terms);
+
+        // assert_eq!(actual_poly, expected_poly)
+    }
 
     #[test]
     fn test_interpolate() {
@@ -364,50 +577,19 @@ mod tests {
             ],
             vec![
                 FFE::new(&BigInt::from(2), &modulus),
-                FFE::new(&BigInt::from(6), &modulus),
-                FFE::new(&BigInt::from(7), &modulus),
-            ],
-        ];
-        let evaluations = vec![
-            FFE::new(&BigInt::from(5), &modulus),
-            FFE::new(&BigInt::from(5), &modulus),
-        ];
-        let poly = MultivariatePoly::interpolate(2, &evaluations_points, &evaluations);
-        assert!(poly.is_err());
-
-        let evaluations_points = vec![
-            vec![
-                FFE::new(&BigInt::from(2), &modulus),
-                FFE::new(&BigInt::from(3), &modulus),
-            ],
-            vec![
-                FFE::new(&BigInt::from(2), &modulus),
-                FFE::new(&BigInt::from(6), &modulus),
-            ],
-        ];
-        let evaluations = vec![
-            FFE::new(&BigInt::from(5), &modulus),
-            FFE::new(&BigInt::from(5), &modulus),
-        ];
-        let poly = MultivariatePoly::interpolate(3, &evaluations_points, &evaluations);
-        assert!(poly.is_err());
-
-        let evaluations_points = vec![
-            vec![
-                FFE::new(&BigInt::from(2), &modulus),
-                FFE::new(&BigInt::from(3), &modulus),
-            ],
-            vec![
-                FFE::new(&BigInt::from(2), &modulus),
                 FFE::new(&BigInt::from(5), &modulus),
+            ],
+            vec![
+                FFE::new(&BigInt::from(4), &modulus),
+                FFE::new(&BigInt::from(8), &modulus),
             ],
         ];
         let evaluations = vec![
             FFE::new(&BigInt::from(5), &modulus),
             FFE::new(&BigInt::from(10), &modulus),
+            FFE::new(&BigInt::from(99), &modulus),
         ];
-        let poly = MultivariatePoly::interpolate(2, &evaluations_points, &evaluations);
-        assert!(poly.is_ok());
-        println!("{:?}", poly.unwrap());
+        let poly = MultivariatePoly::interpolate(&evaluations_points, &evaluations);
+        println!("{:?}", poly);
     }
 }

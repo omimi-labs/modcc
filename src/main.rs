@@ -7,6 +7,7 @@ mod multivariate_poly;
 mod univariate_poly;
 
 use multilinear_poly::MultilinearLagrangeInterpolationSteps;
+use multivariate_interpolation::multivariate_interpolate_over_finite_field;
 use univariate_poly::LagrangeInterpolationSteps;
 
 use actix_cors::Cors;
@@ -36,6 +37,24 @@ struct MultilinearOverBooleanHypercubeRequest {
 struct MultilinearOverBooleanHypercubeResponse {
     coefficients: Vec<(usize, usize)>,
     steps: MultilinearLagrangeInterpolationSteps,
+}
+
+#[derive(Debug, Deserialize)]
+struct MultivariateInterpolationRequest {
+    num_of_vars: usize,
+    evaluation_points: Vec<Vec<i128>>,
+    y_values: Vec<i128>,
+    field: usize,
+}
+
+#[derive(Debug, Serialize)]
+struct MultivariateInterpolationResponse {
+    terms: Vec<(usize, Vec<(usize, usize)>)>,
+}
+
+#[derive(Serialize)]
+struct BadRequestResponse {
+    detail: String,
 }
 
 #[post("/lagrange_interpolation/")]
@@ -72,6 +91,33 @@ async fn multilinear_interpolation_over_boolean_hypercube(
     HttpResponse::Ok().json(response)
 }
 
+#[post("/multivariate_interpolation_over_finite_field/")]
+async fn multivariate_interpolation_over_finite_field(
+    json: web::Json<MultivariateInterpolationRequest>,
+) -> impl Responder {
+    let num_of_vars = json.num_of_vars;
+    let evaluations_points = &json.evaluation_points;
+    let y_values = &json.y_values;
+    let field = json.field;
+    let terms = multivariate_interpolate_over_finite_field(
+        num_of_vars,
+        evaluations_points,
+        y_values,
+        field,
+    );
+    if terms.is_ok() {
+        let response = MultivariateInterpolationResponse {
+            terms: terms.unwrap(),
+        };
+        HttpResponse::Ok().json(response)
+    } else {
+        let response = BadRequestResponse {
+            detail: String::from("invalid inputs"),
+        };
+        HttpResponse::BadRequest().json(response)
+    }
+}
+
 #[actix_web::main]
 async fn main() -> std::io::Result<()> {
     let port = 8080;
@@ -89,6 +135,7 @@ async fn main() -> std::io::Result<()> {
             )
             .service(lagrange_interpolation_over_ff)
             .service(multilinear_interpolation_over_boolean_hypercube)
+            .service(multivariate_interpolation_over_finite_field)
     })
     .bind(("127.0.0.1", port))?
     .workers(2)

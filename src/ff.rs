@@ -2,14 +2,13 @@ use num_bigint::BigInt;
 use num_traits::One;
 use num_traits::Zero;
 use std::{
-    fmt::Debug,
+    fmt::{Debug, Display},
     ops::{Add, AddAssign, Div, DivAssign, Mul, MulAssign, Neg, Sub, SubAssign},
     u128,
 };
 
 pub trait FiniteFieldElement:
     Sized
-    + PartialEq
     + Debug
     + Add
     + Sub
@@ -21,6 +20,10 @@ pub trait FiniteFieldElement:
     + DivAssign
     + Neg
     + Default
+    + PartialEq
+    + Eq
+    + PartialOrd
+    + Ord
 {
     fn new(element: &BigInt, modulus: &BigInt) -> Self;
 
@@ -41,10 +44,17 @@ pub trait FiniteFieldElement:
     fn pow(&self, n: u128) -> Self;
 }
 
-#[derive(Debug, Clone, PartialEq, Default)]
+#[derive(Clone, Default, PartialEq, Eq, PartialOrd, Ord)]
 pub struct FFE {
     element: BigInt,
     modulus: Option<BigInt>,
+}
+
+impl Debug for FFE {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}", self.element)?;
+        Ok(())
+    }
 }
 
 impl FiniteFieldElement for FFE {
