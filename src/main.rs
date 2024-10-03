@@ -127,7 +127,8 @@ async fn main() -> std::io::Result<()> {
         App::new()
             .wrap(
                 Cors::default()
-                    .allowed_origin("https://www.modcc.xyz") // Specify your Next.js app's origin
+                    .allowed_origin("http://localhost:3000")
+                    .allowed_origin("https://www.modcc.xyz")
                     .allowed_methods(vec!["POST"])
                     .allowed_headers(vec![http::header::AUTHORIZATION, http::header::ACCEPT])
                     .allowed_header(http::header::CONTENT_TYPE)
