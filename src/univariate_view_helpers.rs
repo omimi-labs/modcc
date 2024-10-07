@@ -3,6 +3,13 @@ use num_bigint::BigInt;
 use crate::ff::{FiniteFieldElement, FFE};
 use crate::univariate_poly::{LagrangeInterpolationSteps, UniPoly, UnivariatePolynomial};
 
+pub fn evaluate(evaluation_point: isize, poly_string: &str, field: usize) -> usize {
+    let modulus = &BigInt::from(field);
+    let poly = UniPoly::<FFE>::from_latex(poly_string, modulus);
+    let evaluation = poly.evaluate(&FFE::new(&BigInt::from(evaluation_point), modulus));
+    return evaluation.element().try_into().unwrap();
+}
+
 pub fn lagrange_interpolate(
     x_values: &Vec<i128>,
     y_values: &Vec<i128>,

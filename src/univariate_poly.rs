@@ -1,4 +1,5 @@
 use std::{
+    collections,
     ops::{Add, Mul, Neg, Sub},
     u128,
 };
@@ -239,6 +240,62 @@ impl<
     }
 }
 
+impl<F: FiniteFieldElement + Clone> UniPoly<F> {
+    pub fn from_latex(poly_string: &str, modulus: &BigInt) -> Self {
+        println!("{:?}", poly_string);
+        let split_string: Vec<_> = poly_string.split("+").collect();
+        let trimmed_split_string: Vec<_> = split_string.iter().map(|x| x.trim()).collect();
+        let collections_of_terms_and_coefficients: Vec<_> = trimmed_split_string
+            .iter()
+            .map(|x| x.split("^").collect::<Vec<_>>())
+            .collect();
+        let mut degree_and_coefficients = vec![];
+        for terms in collections_of_terms_and_coefficients.iter() {
+            let exponent: usize;
+            let coefficient: usize;
+            if terms.len() == 2 {
+                let second_characters: Vec<_> = terms[1].chars().collect();
+                let exp: usize = second_characters[1].to_string().parse().unwrap();
+                exponent = exp;
+                if terms[0] == "x" {
+                    coefficient = 1;
+                } else {
+                    let coeff: Vec<_> = terms[0].split("x").collect();
+                    coefficient = coeff[0].parse().unwrap();
+                }
+            } else {
+                if terms[0].contains("x") {
+                    exponent = 1;
+                    let first_characters: Vec<_> = terms[0].chars().collect();
+                    if first_characters.len() == 1 {
+                        coefficient = 1;
+                    } else {
+                        coefficient = first_characters[0].to_string().parse().unwrap()
+                    }
+                } else {
+                    exponent = 0;
+                    coefficient = terms[0].parse().unwrap();
+                }
+            }
+            degree_and_coefficients.push((exponent, coefficient));
+        }
+        let degree = degree_and_coefficients[0].0;
+        if degree == 0 {
+            let coefficients = vec![F::new(&BigInt::from(degree_and_coefficients[0].1), modulus)];
+            return UniPoly::new(coefficients);
+        } else {
+            let mut coefficients = vec![F::zero(); degree + 1];
+            for (i, coeff) in coefficients.iter_mut().enumerate() {
+                match degree_and_coefficients.iter().find(|x| x.0 == i) {
+                    Some(value) => *coeff = F::new(&BigInt::from(value.1), modulus),
+                    None => {}
+                }
+            }
+            return UniPoly::new(coefficients);
+        }
+    }
+}
+
 impl<F: FiniteFieldElement + Clone> Mul for &UniPoly<F> {
     type Output = UniPoly<F>;
 
@@ -423,5 +480,28 @@ mod tests {
         ];
         let exp_poly = UniPoly::<FFE>::new(exp_co_effs);
         assert_eq!(exp_poly, poly);
+    }
+
+    #[test]
+    fn test_from_latex() {
+        let poly_string = "9x^5 + 8x^4 +x^3 + 12x^2 + 3x + 3";
+        let modulus = BigInt::from(17);
+        let poly = UniPoly::<FFE>::from_latex(poly_string, &modulus);
+        println!("{:?}", poly);
+
+        let poly_string = "9x^5 + x^3 + 3x + 3";
+        let modulus = BigInt::from(17);
+        let poly = UniPoly::<FFE>::from_latex(poly_string, &modulus);
+        println!("{:?}", poly);
+
+        let poly_string = "9x^5 + x^3 + 3x";
+        let modulus = BigInt::from(17);
+        let poly = UniPoly::<FFE>::from_latex(poly_string, &modulus);
+        println!("{:?}", poly);
+
+        let poly_string = "13x^4 + 9x^3 + 3x^2 + 8x + 3";
+        let modulus = BigInt::from(17);
+        let poly = UniPoly::<FFE>::from_latex(poly_string, &modulus);
+        println!("{:?}", poly);
     }
 }

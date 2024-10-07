@@ -1,18 +1,30 @@
 mod ff;
-mod lagrange_interpolation;
-mod multilinear_interpolation;
 mod multilinear_poly;
-mod multivariate_interpolation;
+mod multilinear_view_helpers;
 mod multivariate_poly;
+mod multivariate_view_helpers;
 mod univariate_poly;
+mod univariate_view_helpers;
 
 use multilinear_poly::MultilinearLagrangeInterpolationSteps;
-use multivariate_interpolation::multivariate_interpolate_over_finite_field;
+use multivariate_view_helpers::multivariate_interpolate_over_finite_field;
 use univariate_poly::LagrangeInterpolationSteps;
 
 use actix_cors::Cors;
 use actix_web::{http, post, web, App, HttpResponse, HttpServer, Responder};
 use serde::{Deserialize, Serialize};
+
+#[derive(Debug, Deserialize)]
+struct EvaluateUnivariatePolyRequest {
+    evaluation_point: isize,
+    poly_string: String,
+    field: usize,
+}
+
+#[derive(Debug, Serialize)]
+struct EvaluateUnivariatePolyResponse {
+    evaluation: usize,
+}
 
 #[derive(Debug, Deserialize)]
 struct LagrangeInterpolationRequest {
@@ -57,6 +69,18 @@ struct BadRequestResponse {
     detail: String,
 }
 
+#[post("/evaluate_univariate_poly/")]
+async fn evaluate_univariate_poly(
+    json: web::Json<EvaluateUnivariatePolyRequest>,
+) -> impl Responder {
+    let poly_string = &json.poly_string;
+    let field = json.field;
+    let evaluation_point = json.evaluation_point;
+    let evaluation = univariate_view_helpers::evaluate(evaluation_point, &poly_string, field);
+    let response = EvaluateUnivariatePolyResponse { evaluation };
+    HttpResponse::Ok().json(response)
+}
+
 #[post("/lagrange_interpolation/")]
 async fn lagrange_interpolation_over_ff(
     json: web::Json<LagrangeInterpolationRequest>,
@@ -65,7 +89,7 @@ async fn lagrange_interpolation_over_ff(
     let y_values = &json.y_values;
     let field = json.field;
     let (coefficients, steps) =
-        lagrange_interpolation::lagrange_interpolate(x_values, y_values, field as u128);
+        univariate_view_helpers::lagrange_interpolate(x_values, y_values, field as u128);
     let response = LagrangeInterpolationResponse {
         coefficients,
         steps,
@@ -80,7 +104,7 @@ async fn multilinear_interpolation_over_boolean_hypercube(
     let y_values = &json.y_values;
     let field = json.field;
     let (coefficients, steps) =
-        multilinear_interpolation::multilinear_interpolate_over_boolean_hypercube(
+        multilinear_view_helpers::multilinear_interpolate_over_boolean_hypercube(
             y_values,
             field as u128,
         );
@@ -137,6 +161,7 @@ async fn main() -> std::io::Result<()> {
             .service(lagrange_interpolation_over_ff)
             .service(multilinear_interpolation_over_boolean_hypercube)
             .service(multivariate_interpolation_over_finite_field)
+            .service(evaluate_univariate_poly)
     })
     .bind(("127.0.0.1", port))?
     .workers(2)

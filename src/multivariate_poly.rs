@@ -590,6 +590,5 @@ mod tests {
             FFE::new(&BigInt::from(99), &modulus),
         ];
         let poly = MultivariatePoly::interpolate(&evaluations_points, &evaluations);
-        println!("{:?}", poly);
     }
 }
