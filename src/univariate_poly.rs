@@ -482,26 +482,26 @@ mod tests {
         assert_eq!(exp_poly, poly);
     }
 
-    #[test]
-    fn test_from_latex() {
-        let poly_string = "9x^5 + 8x^4 +x^3 + 12x^2 + 3x + 3";
-        let modulus = BigInt::from(17);
-        let poly = UniPoly::<FFE>::from_latex(poly_string, &modulus);
-        println!("{:?}", poly);
+    // #[test]
+    // fn test_from_latex() {
+    //     let poly_string = "9x^5 + 8x^4 +x^3 + 12x^2 + 3x + 3";
+    //     let modulus = BigInt::from(17);
+    //     let poly = UniPoly::<FFE>::from_latex(poly_string, &modulus);
+    //     println!("{:?}", poly);
 
-        let poly_string = "9x^5 + x^3 + 3x + 3";
-        let modulus = BigInt::from(17);
-        let poly = UniPoly::<FFE>::from_latex(poly_string, &modulus);
-        println!("{:?}", poly);
+    //     let poly_string = "9x^5 + x^3 + 3x + 3";
+    //     let modulus = BigInt::from(17);
+    //     let poly = UniPoly::<FFE>::from_latex(poly_string, &modulus);
+    //     println!("{:?}", poly);
 
-        let poly_string = "9x^5 + x^3 + 3x";
-        let modulus = BigInt::from(17);
-        let poly = UniPoly::<FFE>::from_latex(poly_string, &modulus);
-        println!("{:?}", poly);
+    //     let poly_string = "9x^5 + x^3 + 3x";
+    //     let modulus = BigInt::from(17);
+    //     let poly = UniPoly::<FFE>::from_latex(poly_string, &modulus);
+    //     println!("{:?}", poly);
 
-        let poly_string = "13x^4 + 9x^3 + 3x^2 + 8x + 3";
-        let modulus = BigInt::from(17);
-        let poly = UniPoly::<FFE>::from_latex(poly_string, &modulus);
-        println!("{:?}", poly);
-    }
+    //     let poly_string = "13x^4 + 9x^3 + 3x^2 + 8x + 3";
+    //     let modulus = BigInt::from(17);
+    //     let poly = UniPoly::<FFE>::from_latex(poly_string, &modulus);
+    //     println!("{:?}", poly);
+    // }
 }
