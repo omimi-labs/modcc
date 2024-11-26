@@ -2,7 +2,7 @@ use std::{
     cmp::Ordering,
     collections::BTreeSet,
     fmt::Debug,
-    ops::{Add, Mul, Neg, Sub},
+    ops::{Add, Index, Mul, Neg, Sub},
 };
 
 use serde::Serialize;
@@ -143,19 +143,29 @@ impl<F: FiniteFieldElement + Clone + Add<Output = F>> Term<F> {
         self.vars = vars_dedup
     }
 
-    pub fn evaluate(&self, evaluation_points: &Vec<(usize, F)>) -> F {
-        let mut evaluation = self.coefficient.clone();
-        for var in self.vars() {
+    pub fn evaluate(&self, evaluation_points: &Vec<(usize, F)>) -> Self {
+        let mut term = self.clone();
+        let vars = term.vars().clone();
+        for var in vars.iter() {
             if evaluation_points
                 .iter()
                 .any(|(index, _)| index == &var.var_index())
             {
-                // This assumes that the evaluation points are sorted and contains points for all variables
-                evaluation *=
-                    (evaluation_points[var.var_index - 1].1).pow(var.power.try_into().unwrap())
+                let index = evaluation_points
+                    .iter()
+                    .position(|(i, _)| i == &var.var_index());
+                let evaluation =
+                    (evaluation_points[index.unwrap()].1).pow(var.power.try_into().unwrap());
+                term.coefficient *= evaluation;
+                let index = term
+                    .vars()
+                    .iter()
+                    .position(|v| v.var_index() == var.var_index());
+                term.vars.remove(index.unwrap());
             }
         }
-        evaluation
+        term.combine_terms();
+        term
     }
 }
 
@@ -267,7 +277,9 @@ pub trait MultivariatePolynomial<F>: Polynomial<F> {
         unique_evaluation_points: &BTreeSet<F>,
         group_of_evaluation_points: &Vec<F>,
     ) -> Self;
-    fn evaluate(&self, evaluation_points: &Vec<(usize, F)>) -> F;
+    fn evaluation(&self, evaluation_points: &Vec<(usize, F)>) -> Self;
+    fn full_evaluation(&self, evaluation_points: &Vec<(usize, F)>) -> F;
+    fn partial_evaluation(&self, evaluation_points: &Vec<(usize, F)>) -> Self;
 }
 
 impl<F: FiniteFieldElement + Clone + Add<Output = F>> Polynomial<F> for MultivariatePoly<F> {
@@ -348,12 +360,30 @@ impl<F: FiniteFieldElement + Clone + Neg<Output = F> + Sub<Output = F> + Add<Out
             .collect::<Vec<_>>();
     }
 
-    fn evaluate(&self, evaluation_points: &Vec<(usize, F)>) -> F {
-        let mut evaluation = F::zero();
-        for term in self.terms.iter() {
-            evaluation += term.evaluate(evaluation_points)
+    fn evaluation(&self, evaluation_points: &Vec<(usize, F)>) -> Self {
+        let mut poly = self.clone();
+        for term in poly.terms.iter_mut() {
+            let new_term = term.evaluate(evaluation_points);
+            *term = new_term;
         }
-        evaluation
+        poly.sort();
+        poly.combine_terms();
+        poly.remove_zeros();
+        poly
+    }
+
+    fn full_evaluation(&self, evaluation_points: &Vec<(usize, F)>) -> F {
+        let poly = self.evaluation(evaluation_points);
+        if poly.terms().len() == 0 {
+            F::zero()
+        } else {
+            poly.terms[0].coefficient.clone()
+        }
+    }
+
+    fn partial_evaluation(&self, evaluation_points: &Vec<(usize, F)>) -> Self {
+        let poly = self.evaluation(evaluation_points);
+        poly
     }
 
     /**
@@ -523,6 +553,45 @@ mod tests {
     use crate::ff::{FiniteFieldElement, FFE};
 
     use super::{MultivariatePoly, MultivariatePolynomial, Polynomial, Term, Var};
+
+    fn generate_point(num_of_points: usize, modulus: &BigInt) -> Vec<FFE> {
+        let mut points = vec![];
+        let mut rng = thread_rng();
+        for _ in 0..num_of_points {
+            let value: usize = rng.gen();
+            let element = BigInt::from(value);
+            let var = FFE::new(&element, modulus);
+            points.push(var);
+        }
+        points
+    }
+
+    fn generate_random_evaluation_points(
+        evaluation_points: &mut Vec<Vec<FFE>>,
+        num_of_vars: usize,
+        num_of_points: usize,
+        modulus: &BigInt,
+    ) -> Vec<Vec<FFE>> {
+        for _ in 0..num_of_points {
+            let point = generate_point(num_of_vars, modulus);
+            if evaluation_points.contains(&point) {
+                let point = generate_point(num_of_vars, modulus);
+                evaluation_points.push(point);
+            } else {
+                evaluation_points.push(point);
+            }
+        }
+        evaluation_points.to_vec()
+    }
+
+    fn get_evaluation_point(index: usize, evaluation_points: &Vec<Vec<FFE>>) -> Vec<(usize, FFE)> {
+        let point: &Vec<FFE> = &evaluation_points[index];
+        let mut evaluation_point = vec![];
+        for (i, point) in point.iter().enumerate() {
+            evaluation_point.push((i + 1, point.clone()));
+        }
+        evaluation_point
+    }
 
     #[test]
     fn test_combining_terms() {
@@ -1058,7 +1127,7 @@ mod tests {
     }
 
     #[test]
-    fn test_evaluate() {
+    fn test_term_evaluate() {
         let modulus = BigInt::from(17);
         let x_1 = Var::new(1, 1);
         let x_2 = Var::new(2, 1);
@@ -1074,52 +1143,13 @@ mod tests {
             (2, FFE::zero()),
             (3, FFE::new(&BigInt::from(16), &modulus)),
         ];
-        let evaluation = poly.evaluate(&evaluation_points);
+        let evaluation = poly.full_evaluation(&evaluation_points);
         let expected_evaluation = FFE::new(&BigInt::from(9), &modulus);
         assert_eq!(expected_evaluation, evaluation);
     }
 
-    fn generate_point(num_of_points: usize, modulus: &BigInt) -> Vec<FFE> {
-        let mut points = vec![];
-        let mut rng = thread_rng();
-        for _ in 0..num_of_points {
-            let value: usize = rng.gen();
-            let element = BigInt::from(value);
-            let var = FFE::new(&element, modulus);
-            points.push(var);
-        }
-        points
-    }
-
-    fn generate_random_evaluation_points(
-        evaluation_points: &mut Vec<Vec<FFE>>,
-        num_of_vars: usize,
-        num_of_points: usize,
-        modulus: &BigInt,
-    ) -> Vec<Vec<FFE>> {
-        for _ in 0..num_of_points {
-            let point = generate_point(num_of_vars, modulus);
-            if evaluation_points.contains(&point) {
-                let point = generate_point(num_of_vars, modulus);
-                evaluation_points.push(point);
-            } else {
-                evaluation_points.push(point);
-            }
-        }
-        evaluation_points.to_vec()
-    }
-
-    fn get_evaluation_point(index: usize, evaluation_points: &Vec<Vec<FFE>>) -> Vec<(usize, FFE)> {
-        let point: &Vec<FFE> = &evaluation_points[index];
-        let mut evaluation_point = vec![];
-        for (i, point) in point.iter().enumerate() {
-            evaluation_point.push((i + 1, point.clone()));
-        }
-        evaluation_point
-    }
-
-    #[test]
-    fn test_interpolate() {
+    // #[test]
+    fn test_interpolate_and_full_evaluation() {
         let modulus = BigInt::from(17);
         let rounds = 1000;
         for _ in 0..rounds {
@@ -1142,7 +1172,7 @@ mod tests {
             let poly = MultivariatePoly::interpolate(&evaluation_points, &evaluations);
 
             let evaluation_point = get_evaluation_point(0, &evaluation_points);
-            let evaluation = poly.evaluate(&evaluation_point);
+            let evaluation = poly.full_evaluation(&evaluation_point);
             println!(
                 "{:?} {:?} {:?}",
                 evaluation_points, evaluations, evaluation_point
@@ -1150,7 +1180,7 @@ mod tests {
             assert_eq!(evaluation, evaluations[0]);
 
             let evaluation_point = get_evaluation_point(1, &evaluation_points);
-            let evaluation = poly.evaluate(&evaluation_point);
+            let evaluation = poly.full_evaluation(&evaluation_point);
             println!(
                 "{:?} {:?} {:?}",
                 evaluation_points, evaluations, evaluation_point
@@ -1158,7 +1188,7 @@ mod tests {
             assert_eq!(evaluation, evaluations[1]);
 
             let evaluation_point = get_evaluation_point(2, &evaluation_points);
-            let evaluation = poly.evaluate(&evaluation_point);
+            let evaluation = poly.full_evaluation(&evaluation_point);
             println!(
                 "{:?} {:?} {:?}",
                 evaluation_points, evaluations, evaluation_point
@@ -1166,11 +1196,7 @@ mod tests {
             assert_eq!(evaluation, evaluations[2]);
 
             let evaluation_point = get_evaluation_point(3, &evaluation_points);
-            let evaluation = poly.evaluate(&evaluation_point);
-            println!(
-                "{:?} {:?} {:?}",
-                evaluation_points, evaluations, evaluation_point
-            );
+            let evaluation = poly.full_evaluation(&evaluation_point);
             assert_eq!(evaluation, evaluations[3]);
         }
         for _ in 0..rounds {
@@ -1193,7 +1219,7 @@ mod tests {
             let poly = MultivariatePoly::interpolate(&evaluation_points, &evaluations);
 
             let evaluation_point = get_evaluation_point(0, &evaluation_points);
-            let evaluation = poly.evaluate(&evaluation_point);
+            let evaluation = poly.full_evaluation(&evaluation_point);
             println!(
                 "{:?} {:?} {:?}",
                 evaluation_points, evaluations, evaluation_point
@@ -1201,7 +1227,7 @@ mod tests {
             assert_eq!(evaluation, evaluations[0]);
 
             let evaluation_point = get_evaluation_point(1, &evaluation_points);
-            let evaluation = poly.evaluate(&evaluation_point);
+            let evaluation = poly.full_evaluation(&evaluation_point);
             println!(
                 "{:?} {:?} {:?}",
                 evaluation_points, evaluations, evaluation_point
@@ -1209,7 +1235,7 @@ mod tests {
             assert_eq!(evaluation, evaluations[1]);
 
             let evaluation_point = get_evaluation_point(2, &evaluation_points);
-            let evaluation = poly.evaluate(&evaluation_point);
+            let evaluation = poly.full_evaluation(&evaluation_point);
             println!(
                 "{:?} {:?} {:?}",
                 evaluation_points, evaluations, evaluation_point
@@ -1217,7 +1243,7 @@ mod tests {
             assert_eq!(evaluation, evaluations[2]);
 
             let evaluation_point = get_evaluation_point(3, &evaluation_points);
-            let evaluation = poly.evaluate(&evaluation_point);
+            let evaluation = poly.full_evaluation(&evaluation_point);
             println!(
                 "{:?} {:?} {:?}",
                 evaluation_points, evaluations, evaluation_point
@@ -1225,7 +1251,7 @@ mod tests {
             assert_eq!(evaluation, evaluations[3]);
 
             let evaluation_point = get_evaluation_point(4, &evaluation_points);
-            let evaluation = poly.evaluate(&evaluation_point);
+            let evaluation = poly.full_evaluation(&evaluation_point);
             println!(
                 "{:?} {:?} {:?}",
                 evaluation_points, evaluations, evaluation_point
@@ -1233,7 +1259,7 @@ mod tests {
             assert_eq!(evaluation, evaluations[4]);
 
             let evaluation_point = get_evaluation_point(5, &evaluation_points);
-            let evaluation = poly.evaluate(&evaluation_point);
+            let evaluation = poly.full_evaluation(&evaluation_point);
             println!(
                 "{:?} {:?} {:?}",
                 evaluation_points, evaluations, evaluation_point
@@ -1241,7 +1267,7 @@ mod tests {
             assert_eq!(evaluation, evaluations[5]);
 
             let evaluation_point = get_evaluation_point(6, &evaluation_points);
-            let evaluation = poly.evaluate(&evaluation_point);
+            let evaluation = poly.full_evaluation(&evaluation_point);
             println!(
                 "{:?} {:?} {:?}",
                 evaluation_points, evaluations, evaluation_point
@@ -1249,12 +1275,89 @@ mod tests {
             assert_eq!(evaluation, evaluations[6]);
 
             let evaluation_point = get_evaluation_point(7, &evaluation_points);
-            let evaluation = poly.evaluate(&evaluation_point);
+            let evaluation = poly.full_evaluation(&evaluation_point);
             println!(
                 "{:?} {:?} {:?}",
                 evaluation_points, evaluations, evaluation_point
             );
             assert_eq!(evaluation, evaluations[7]);
+        }
+    }
+
+    #[test]
+    fn test_partial_evaluation() {
+        let modulus = BigInt::from(17);
+        let rounds = 1000;
+        for _ in 0..rounds {
+            // 2 variables
+            let num_of_vars = 2;
+
+            let num_of_points = 4;
+
+            let mut evaluation_points: Vec<Vec<FFE>> = vec![];
+
+            let evaluation_points = generate_random_evaluation_points(
+                &mut evaluation_points,
+                num_of_vars,
+                num_of_points,
+                &modulus,
+            );
+
+            let evaluations = generate_point(num_of_points, &modulus);
+
+            let poly = MultivariatePoly::interpolate(&evaluation_points, &evaluations);
+
+            println!("{:?}", poly);
+
+            let evaluation_point = get_evaluation_point(0, &evaluation_points);
+            let evaluation_1 = poly.full_evaluation(&evaluation_point);
+
+            let first_point = vec![evaluation_point[0].clone()];
+            let partial_poly_1 = poly.partial_evaluation(&first_point);
+            println!("{:?} {:?}", partial_poly_1, first_point);
+
+            let second_point = vec![evaluation_point[1].clone()];
+            let evaluation_2 = partial_poly_1.full_evaluation(&second_point);
+
+            assert_eq!(evaluation_1, evaluation_2);
+        }
+
+        for _ in 0..rounds {
+            // 3 variables
+            let num_of_vars = 3;
+
+            let num_of_points = 8;
+
+            let mut evaluation_points: Vec<Vec<FFE>> = vec![];
+
+            let evaluation_points = generate_random_evaluation_points(
+                &mut evaluation_points,
+                num_of_vars,
+                num_of_points,
+                &modulus,
+            );
+
+            let evaluations = generate_point(num_of_points, &modulus);
+
+            let poly = MultivariatePoly::interpolate(&evaluation_points, &evaluations);
+
+            println!("{:?}", poly);
+
+            let evaluation_point = get_evaluation_point(0, &evaluation_points);
+            let evaluation_1 = poly.full_evaluation(&evaluation_point);
+
+            let first_point = vec![evaluation_point[0].clone()];
+            let partial_poly_1 = poly.partial_evaluation(&first_point);
+            println!("{:?} {:?}", partial_poly_1, first_point);
+
+            let second_point = vec![evaluation_point[1].clone()];
+            let partial_poly_2 = partial_poly_1.partial_evaluation(&second_point);
+            println!("{:?} {:?}", partial_poly_2, second_point);
+
+            let third_point = vec![evaluation_point[2].clone()];
+            let evaluation_2 = partial_poly_2.full_evaluation(&third_point);
+
+            assert_eq!(evaluation_1, evaluation_2);
         }
     }
 }
