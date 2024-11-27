@@ -2,26 +2,28 @@ use std::{
     cmp::Ordering,
     collections::BTreeSet,
     fmt::Debug,
-    ops::{Add, Index, Mul, Neg, Sub},
+    ops::{Add, Mul, Neg, Sub},
 };
 
+use num_bigint::BigInt;
+use num_traits::One;
 use serde::Serialize;
 
 use crate::ff::FiniteFieldElement;
 
 #[derive(Default, Clone, Copy, PartialEq, Eq, Serialize)]
 pub struct Var {
-    var_index: usize,
+    index: usize,
     power: usize,
 }
 
 impl Var {
-    pub fn new(var_index: usize, power: usize) -> Self {
-        Var { var_index, power }
+    pub fn new(index: usize, power: usize) -> Self {
+        Var { index, power }
     }
 
-    pub fn var_index(&self) -> usize {
-        self.var_index
+    pub fn index(&self) -> usize {
+        self.index
     }
 
     pub fn power(&self) -> usize {
@@ -29,16 +31,38 @@ impl Var {
     }
 
     pub fn pow(&self, n: usize) -> Self {
-        Var::new(self.var_index, self.power * n)
+        Var::new(self.index, self.power * n)
+    }
+
+    fn to_latex(&self) -> String {
+        let latex: String;
+        if self.power() == 1 {
+            latex = format!("x_{{{}}}", self.index())
+        } else {
+            latex = format!("x_{{{}}}^{{{}}}", self.index(), self.power())
+        }
+        latex
+    }
+
+    fn from_latex(latex_string: String) -> Self {
+        let power_and_index: Vec<&str> = latex_string.split(&['{', '}', '^'][..]).collect();
+        if power_and_index.len() == 3 {
+            let index: usize = power_and_index[1].parse().unwrap();
+            return Self::new(index, 1);
+        } else {
+            let index: usize = power_and_index[1].parse().unwrap();
+            let power: usize = power_and_index[4].parse().unwrap();
+            return Self::new(index, power);
+        }
     }
 }
 
 impl Debug for Var {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         if self.power == 1 {
-            write!(f, "x_{}", self.var_index)?;
+            write!(f, "x_{}", self.index)?;
         } else {
-            write!(f, "(x_{})^{}", self.var_index, self.power)?;
+            write!(f, "(x_{})^{}", self.index, self.power)?;
         }
         Ok(())
     }
@@ -115,7 +139,7 @@ impl<F: FiniteFieldElement + Clone + Add<Output = F>> Term<F> {
 
     fn sort(&mut self) {
         self.vars.sort_by(|a, b| a.power.cmp(&b.power));
-        self.vars.sort_by(|a, b| a.var_index.cmp(&b.var_index));
+        self.vars.sort_by(|a, b| a.index.cmp(&b.index));
     }
 
     pub fn coefficient(&self) -> &F {
@@ -126,6 +150,72 @@ impl<F: FiniteFieldElement + Clone + Add<Output = F>> Term<F> {
         &self.vars
     }
 
+    fn to_latex(&self) -> String {
+        let mut latex: String;
+        if self.is_zero() {
+            latex = String::from("0");
+            return latex;
+        } else if self.is_one_and_constant() {
+            latex = String::from("1");
+            return latex;
+        } else if self.is_one() {
+            latex = String::from("");
+            for var in self.vars() {
+                let var_latex = var.to_latex();
+                latex += &var_latex;
+            }
+            return latex;
+        } else if self.is_constant() {
+            latex = self.coefficient().element().to_string();
+            return latex;
+        } else {
+            latex = self.coefficient().element().to_string();
+            for var in self.vars() {
+                let var_latex = var.to_latex();
+                latex += &var_latex;
+            }
+            return latex;
+        }
+    }
+
+    fn from_latex(latex_string: String, modulus: &BigInt) -> Self {
+        let chars: Vec<&str> = latex_string.split("x").collect();
+        if chars.len() == 1 {
+            let constant: BigInt = chars[0].parse().unwrap();
+            let coefficient = F::new(&constant, modulus);
+            let term = Self::new(coefficient, vec![]);
+            return term;
+        } else if chars[0] == "" {
+            let constant: BigInt = BigInt::one();
+            let coefficient = F::new(&constant, modulus);
+            let mut vars = vec![];
+            for (i, var_str) in chars.iter().enumerate() {
+                if i == 0 {
+                    continue;
+                }
+                let var_latex = format!("x{}", var_str);
+                let var = Var::from_latex(var_latex);
+                vars.push(var);
+            }
+            let term = Self::new(coefficient, vars);
+            return term;
+        } else {
+            let constant: BigInt = chars[0].parse().unwrap();
+            let coefficient = F::new(&constant, modulus);
+            let mut vars = vec![];
+            for (i, var_str) in chars.iter().enumerate() {
+                if i == 0 {
+                    continue;
+                }
+                let var_latex = format!("x{}", var_str);
+                let var = Var::from_latex(var_latex);
+                vars.push(var);
+            }
+            let term = Self::new(coefficient, vars);
+            return term;
+        }
+    }
+
     // Sums the powers the duplicated variables.
     pub fn combine_terms(&mut self) {
         self.sort();
@@ -133,7 +223,7 @@ impl<F: FiniteFieldElement + Clone + Add<Output = F>> Term<F> {
 
         for var in self.vars().iter() {
             if let Some(prev) = vars_dedup.last_mut() {
-                if prev.var_index() == var.var_index() {
+                if prev.index() == var.index() {
                     prev.power += var.power();
                     continue;
                 }
@@ -149,18 +239,15 @@ impl<F: FiniteFieldElement + Clone + Add<Output = F>> Term<F> {
         for var in vars.iter() {
             if evaluation_points
                 .iter()
-                .any(|(index, _)| index == &var.var_index())
+                .any(|(index, _)| index == &var.index())
             {
                 let index = evaluation_points
                     .iter()
-                    .position(|(i, _)| i == &var.var_index());
+                    .position(|(i, _)| i == &var.index());
                 let evaluation =
                     (evaluation_points[index.unwrap()].1).pow(var.power.try_into().unwrap());
                 term.coefficient *= evaluation;
-                let index = term
-                    .vars()
-                    .iter()
-                    .position(|v| v.var_index() == var.var_index());
+                let index = term.vars().iter().position(|v| v.index() == var.index());
                 term.vars.remove(index.unwrap());
             }
         }
@@ -175,12 +262,12 @@ impl<F: FiniteFieldElement + Clone + Add<Output = F>> PartialOrd for Term<F> {
             return Some(self.degree().cmp(&other.degree()));
         } else {
             for (cur, other) in self.vars.iter().zip(other.vars.iter()) {
-                if cur.var_index == other.var_index {
+                if cur.index == other.index {
                     if cur.power != other.power {
                         return Some(cur.power.cmp(&other.power));
                     }
                 } else {
-                    return Some(cur.var_index.cmp(&other.var_index));
+                    return Some(cur.index.cmp(&other.index));
                 }
             }
             Some(Ordering::Equal)
@@ -263,6 +350,8 @@ pub trait Polynomial<F>: Sized {
 }
 
 pub trait MultivariatePolynomial<F>: Polynomial<F> {
+    fn to_latex(&self) -> String;
+    fn from_latex(latex_string: String, modulus: &BigInt) -> Self;
     fn sort(&mut self);
     fn remove_zeros(&mut self);
     fn combine_terms(&mut self);
@@ -325,6 +414,61 @@ impl<F: FiniteFieldElement + Clone + Add<Output = F>> Polynomial<F> for Multivar
 impl<F: FiniteFieldElement + Clone + Neg<Output = F> + Sub<Output = F> + Add<Output = F>>
     MultivariatePolynomial<F> for MultivariatePoly<F>
 {
+    fn to_latex(&self) -> String {
+        let mut latex: String;
+        if self.is_zero() || self.is_one() || self.is_constant() {
+            latex = self.terms[0].to_latex();
+            return latex;
+        } else if self.terms().len() == 1 {
+            latex = self.terms[0].to_latex();
+            return latex;
+        } else {
+            if self.terms[0].is_constant() {
+                let constant = self.terms[0].to_latex();
+                latex = self.terms[1].to_latex();
+                for (i, term) in self.terms().iter().enumerate() {
+                    if i == 0 || i == 1 {
+                        continue;
+                    }
+                    let term_latex = term.to_latex();
+                    latex += &format!(" + {}", term_latex);
+                }
+                latex += &format!(" + {}", constant);
+                return latex;
+            } else {
+                latex = self.terms[0].to_latex();
+                for (i, term) in self.terms().iter().enumerate() {
+                    if i == 0 {
+                        continue;
+                    }
+                    let term_latex = term.to_latex();
+                    latex += &format!(" + {}", term_latex);
+                }
+                return latex;
+            }
+        }
+    }
+
+    fn from_latex(latex_string: String, modulus: &BigInt) -> Self {
+        let terms_strs: Vec<&str> = latex_string.split("+").collect();
+        let trimmed_term_strs: Vec<&str> =
+            terms_strs.iter().map(|term_str| term_str.trim()).collect();
+        let mut terms = vec![];
+        for term_str in trimmed_term_strs {
+            let term = Term::<F>::from_latex(term_str.to_string(), modulus);
+            terms.push(term);
+        }
+        if terms.len() != 1 && terms.last().unwrap().is_constant() {
+            let last_term = terms.pop().unwrap();
+            terms.insert(0, last_term);
+            let poly = Self::new(terms);
+            return poly;
+        } else {
+            let poly = Self::new(terms);
+            return poly;
+        }
+    }
+
     fn sort(&mut self) {
         self.terms.sort_by(|a, b| a.cmp(&b));
     }
@@ -448,7 +592,7 @@ impl<F: FiniteFieldElement + Clone + Neg<Output = F> + Sub<Output = F> + Add<Out
                 continue;
             }
             let var = Var {
-                var_index: index,
+                index: index,
                 power: 1,
             }; // x_{index}
             let term = Term {
@@ -1052,18 +1196,9 @@ mod tests {
     fn test_add() {
         let modulus = BigInt::from(17);
 
-        let x_1 = Var {
-            var_index: 1,
-            power: 1,
-        };
-        let x_2 = Var {
-            var_index: 2,
-            power: 1,
-        };
-        let x_3 = Var {
-            var_index: 3,
-            power: 1,
-        };
+        let x_1 = Var { index: 1, power: 1 };
+        let x_2 = Var { index: 2, power: 1 };
+        let x_3 = Var { index: 3, power: 1 };
 
         // SIMPLE CASE
 
@@ -1148,7 +1283,7 @@ mod tests {
         assert_eq!(expected_evaluation, evaluation);
     }
 
-    // #[test]
+    #[test]
     fn test_interpolate_and_full_evaluation() {
         let modulus = BigInt::from(17);
         let rounds = 1000;
@@ -1358,6 +1493,63 @@ mod tests {
             let evaluation_2 = partial_poly_2.full_evaluation(&third_point);
 
             assert_eq!(evaluation_1, evaluation_2);
+        }
+    }
+
+    #[test]
+    fn test_latex() {
+        let modulus = BigInt::from(17);
+        let rounds = 1000;
+        for _ in 0..rounds {
+            // 2 variables
+            let num_of_vars = 2;
+
+            let num_of_points = 4;
+
+            let mut evaluation_points: Vec<Vec<FFE>> = vec![];
+
+            let evaluation_points = generate_random_evaluation_points(
+                &mut evaluation_points,
+                num_of_vars,
+                num_of_points,
+                &modulus,
+            );
+
+            let evaluations = generate_point(num_of_points, &modulus);
+
+            let poly = MultivariatePoly::interpolate(&evaluation_points, &evaluations);
+
+            let poly_latex = poly.to_latex();
+
+            let poly_from_latex = MultivariatePoly::<FFE>::from_latex(poly_latex, &modulus);
+
+            assert_eq!(poly, poly_from_latex);
+        }
+
+        for _ in 0..rounds {
+            // 3 variables
+            let num_of_vars = 3;
+
+            let num_of_points = 8;
+
+            let mut evaluation_points: Vec<Vec<FFE>> = vec![];
+
+            let evaluation_points = generate_random_evaluation_points(
+                &mut evaluation_points,
+                num_of_vars,
+                num_of_points,
+                &modulus,
+            );
+
+            let evaluations = generate_point(num_of_points, &modulus);
+
+            let poly = MultivariatePoly::interpolate(&evaluation_points, &evaluations);
+
+            let poly_latex = poly.to_latex();
+
+            let poly_from_latex = MultivariatePoly::<FFE>::from_latex(poly_latex, &modulus);
+
+            assert_eq!(poly, poly_from_latex);
         }
     }
 }

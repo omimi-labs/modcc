@@ -42,7 +42,7 @@ pub fn multivariate_interpolate_over_finite_field(
                 term.coefficient().element().try_into().unwrap(),
                 term.vars()
                     .iter()
-                    .map(|x| (x.var_index(), x.power()))
+                    .map(|x| (x.index(), x.power()))
                     .collect::<Vec<_>>(),
             )
         })
