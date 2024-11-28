@@ -48,8 +48,8 @@ impl<F: FiniteFieldElement + Clone + Neg<Output = F>> Iterator for BooleanHyperC
         let one = BigInt::one();
 
         let point = index_as_binary
-            .char_indices()
-            .map(|(i, x)| {
+            .chars()
+            .map(|x| {
                 if x == '1' {
                     F::new(&one, &self.modulus)
                 } else {
@@ -57,7 +57,6 @@ impl<F: FiniteFieldElement + Clone + Neg<Output = F>> Iterator for BooleanHyperC
                 }
             })
             .collect::<Vec<F>>();
-
         self.current_point += 1;
         Some((point, index_as_binary))
     }
@@ -102,16 +101,16 @@ mod tests {
     fn test_interpolate() {
         let modulus = BigInt::from(17);
         // x + y + z + 7
-        // let evaluations = vec![
-        //     FFE::new(&BigInt::from(7), &modulus),
-        //     FFE::new(&BigInt::from(8), &modulus),
-        //     FFE::new(&BigInt::from(8), &modulus),
-        //     FFE::new(&BigInt::from(9), &modulus),
-        //     FFE::new(&BigInt::from(8), &modulus),
-        //     FFE::new(&BigInt::from(9), &modulus),
-        //     FFE::new(&BigInt::from(9), &modulus),
-        //     FFE::new(&BigInt::from(10), &modulus),
-        // ];
+        let evaluations = vec![
+            FFE::new(&BigInt::from(7), &modulus),
+            FFE::new(&BigInt::from(8), &modulus),
+            FFE::new(&BigInt::from(8), &modulus),
+            FFE::new(&BigInt::from(9), &modulus),
+            FFE::new(&BigInt::from(8), &modulus),
+            FFE::new(&BigInt::from(9), &modulus),
+            FFE::new(&BigInt::from(9), &modulus),
+            FFE::new(&BigInt::from(10), &modulus),
+        ];
         // let poly = create_multilinear_poly(&evaluations, &modulus);
         // println!("{:?}", poly);
         // let evaluations = vec![

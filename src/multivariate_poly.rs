@@ -381,7 +381,7 @@ impl<F: FiniteFieldElement + Clone + Add<Output = F>> Polynomial<F> for Multivar
     }
 
     fn is_one(&self) -> bool {
-        self.terms.len() == 1 && self.terms()[0].is_one()
+        self.terms.len() == 1 && self.terms()[0].is_one_and_constant()
     }
 
     fn is_constant(&self) -> bool {
@@ -568,14 +568,17 @@ impl<F: FiniteFieldElement + Clone + Neg<Output = F> + Sub<Output = F> + Add<Out
         group_of_evaluation_points: &Vec<F>,
     ) -> Self {
         let mut group_lagrange_polynomial = Self::one();
+        let mut l_0_s = vec![];
         for (index, evaluation) in group_of_evaluation_points.iter().enumerate() {
             let lagrange_polynomial = Self::get_lagrange_polynomial_for_single(
                 index + 1,
                 evaluation,
                 unique_evaluation_points,
             );
+            l_0_s.push(lagrange_polynomial.clone());
             group_lagrange_polynomial = &group_lagrange_polynomial * &lagrange_polynomial;
         }
+        println!("{:?}", l_0_s);
         group_lagrange_polynomial
     }
 
@@ -585,7 +588,6 @@ impl<F: FiniteFieldElement + Clone + Neg<Output = F> + Sub<Output = F> + Add<Out
         evaluation_points: &BTreeSet<F>,
     ) -> Self {
         let mut resulting_polynomial = MultivariatePoly::one();
-        // let mut running_denominator = F::one();
 
         for (_, evaluation_point) in evaluation_points.iter().enumerate() {
             if current_evaluation_point == evaluation_point {
@@ -606,7 +608,6 @@ impl<F: FiniteFieldElement + Clone + Neg<Output = F> + Sub<Output = F> + Add<Out
             let terms = vec![constant_term, term];
             let mut numerator = MultivariatePoly::new(terms);
             let denominator = current_evaluation_point.clone() - evaluation_point.clone();
-            // running_denominator *= denominator.clone();
             numerator.scalar_mul(denominator.inverse().unwrap());
             resulting_polynomial = &resulting_polynomial * &numerator;
         }
