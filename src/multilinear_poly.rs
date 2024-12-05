@@ -6,7 +6,7 @@ use num_bigint::BigInt;
 use num_traits::{One, ToPrimitive, Zero};
 
 use crate::ff::FiniteFieldElement;
-use crate::multivariate_poly::{MultivariatePoly, MultivariatePolynomial, Polynomial, Term, Var};
+use crate::multivariate_poly::{MultivariatePoly, MultivariatePolynomial, Properties, Steps};
 
 /// Convert a number to a binary string of a given size
 pub fn binary_string(value: usize, bit_count: usize) -> String {
@@ -67,7 +67,7 @@ pub fn create_multilinear_poly<
 >(
     y_values: &Vec<F>,
     field: &BigInt,
-) -> MultivariatePoly<F> {
+) -> (MultivariatePoly<F>, Steps, Properties) {
     let normalized_eval_len = y_values.len().next_power_of_two();
     let num_of_vars = normalized_eval_len
         .to_f64()
@@ -83,43 +83,4 @@ pub fn create_multilinear_poly<
         group_of_evaluation_points.push(evaluation_points);
     }
     MultivariatePoly::interpolate(&group_of_evaluation_points, &evaluations)
-}
-
-#[cfg(test)]
-mod tests {
-
-    use num_bigint::BigInt;
-
-    use crate::{
-        ff::{FiniteFieldElement, FFE},
-        multivariate_poly::MultivariatePolynomial,
-    };
-
-    use super::create_multilinear_poly;
-
-    #[test]
-    fn test_interpolate() {
-        let modulus = BigInt::from(17);
-        // x + y + z + 7
-        let evaluations = vec![
-            FFE::new(&BigInt::from(7), &modulus),
-            FFE::new(&BigInt::from(8), &modulus),
-            FFE::new(&BigInt::from(8), &modulus),
-            FFE::new(&BigInt::from(9), &modulus),
-            FFE::new(&BigInt::from(8), &modulus),
-            FFE::new(&BigInt::from(9), &modulus),
-            FFE::new(&BigInt::from(9), &modulus),
-            FFE::new(&BigInt::from(10), &modulus),
-        ];
-        // let poly = create_multilinear_poly(&evaluations, &modulus);
-        // println!("{:?}", poly);
-        // let evaluations = vec![
-        //     FFE::new(&BigInt::from(5), &modulus),
-        //     FFE::new(&BigInt::from(6), &modulus),
-        //     FFE::new(&BigInt::from(7), &modulus),
-        //     FFE::new(&BigInt::from(8), &modulus),
-        // ];
-        // let poly = create_multilinear_poly(&evaluations, &modulus);
-        // println!("{:?}", poly);
-    }
 }

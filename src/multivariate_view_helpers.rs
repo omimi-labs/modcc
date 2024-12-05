@@ -32,8 +32,7 @@ pub fn multivariate_interpolate_over_finite_field(
             .collect::<Vec<_>>()
         })
         .collect();
-    let poly = MultivariatePoly::interpolate(&group_of_evaluation_points, &new_y_values);
-    println!("{:?}", poly);
+    let (poly, _, _) = MultivariatePoly::interpolate(&group_of_evaluation_points, &new_y_values);
     let terms = poly
         .terms()
         .iter()

@@ -315,6 +315,26 @@ impl<F: FiniteFieldElement + Clone + Add<Output = F>> Mul for &Term<F> {
     }
 }
 
+#[derive(Debug, Serialize)]
+pub struct InterpolationStep {
+    step_1: String,
+    step_2: String,
+    step_3: String,
+    step_4: String,
+}
+
+#[derive(Debug, Serialize)]
+pub struct Steps {
+    interpolation_steps: Vec<InterpolationStep>,
+    combination_step: String,
+}
+
+#[derive(Debug, Serialize)]
+pub struct Properties {
+    num_of_vars: usize,
+    num_of_evaluations: usize,
+}
+
 #[derive(Default, Clone, PartialEq, Eq, Serialize)]
 pub struct MultivariatePoly<F> {
     terms: Vec<Term<F>>,
@@ -356,7 +376,10 @@ pub trait MultivariatePolynomial<F>: Polynomial<F> {
     fn remove_zeros(&mut self);
     fn combine_terms(&mut self);
     fn scalar_mul(&mut self, scalar: F);
-    fn interpolate(group_of_evaluation_points: &Vec<Vec<F>>, y_values: &Vec<F>) -> Self;
+    fn interpolate(
+        group_of_evaluation_points: &Vec<Vec<F>>,
+        y_values: &Vec<F>,
+    ) -> (Self, Steps, Properties);
     fn get_lagrange_polynomial_for_single(
         index: usize,
         current_evaluation_point: &F,
@@ -365,7 +388,7 @@ pub trait MultivariatePolynomial<F>: Polynomial<F> {
     fn get_lagrange_polynomial_for_group(
         unique_evaluation_points: &BTreeSet<F>,
         group_of_evaluation_points: &Vec<F>,
-    ) -> Self;
+    ) -> (Self, InterpolationStep);
     fn evaluation(&self, evaluation_points: &Vec<(usize, F)>) -> Self;
     fn full_evaluation(&self, evaluation_points: &Vec<(usize, F)>) -> F;
     fn partial_evaluation(&self, evaluation_points: &Vec<(usize, F)>) -> Self;
@@ -541,7 +564,9 @@ impl<F: FiniteFieldElement + Clone + Neg<Output = F> + Sub<Output = F> + Add<Out
     fn interpolate(
         collection_of_group_of_evaluation_points: &Vec<Vec<F>>,
         y_values: &Vec<F>,
-    ) -> Self {
+    ) -> (Self, Steps, Properties) {
+        let mut interpolation_steps = vec![];
+        let mut combination_step = String::from("");
         let mut unique_evaluation_points = BTreeSet::new();
         for group in collection_of_group_of_evaluation_points.iter() {
             for evaluation_point in group {
@@ -549,37 +574,70 @@ impl<F: FiniteFieldElement + Clone + Neg<Output = F> + Sub<Output = F> + Add<Out
             }
         }
         let mut resulting_polynomial = Self::zero();
-        for (group_of_evaluation_points, y) in collection_of_group_of_evaluation_points
+        for (i, (group_of_evaluation_points, y)) in collection_of_group_of_evaluation_points
             .iter()
             .zip(y_values)
+            .enumerate()
         {
-            let mut group_lagrange_polynomial = Self::get_lagrange_polynomial_for_group(
+            let (mut group_lagrange_polynomial, step) = Self::get_lagrange_polynomial_for_group(
                 &unique_evaluation_points,
                 group_of_evaluation_points,
             );
+            if i == 0 {
+                combination_step += &format!("{:?}({})", y, group_lagrange_polynomial.to_latex());
+            } else {
+                combination_step +=
+                    &format!(" + {:?}({})", y, group_lagrange_polynomial.to_latex());
+            }
+            interpolation_steps.push(step);
             group_lagrange_polynomial.scalar_mul(y.clone());
             resulting_polynomial = &resulting_polynomial + &group_lagrange_polynomial;
         }
-        resulting_polynomial
+
+        let steps = Steps {
+            interpolation_steps,
+            combination_step,
+        };
+        let properties = Properties {
+            num_of_vars: collection_of_group_of_evaluation_points[0].len(),
+            num_of_evaluations: y_values.len(),
+        };
+        (resulting_polynomial, steps, properties)
     }
 
     fn get_lagrange_polynomial_for_group(
         unique_evaluation_points: &BTreeSet<F>,
         group_of_evaluation_points: &Vec<F>,
-    ) -> Self {
+    ) -> (Self, InterpolationStep) {
+        let mut step_1 = String::from("L(");
+        let mut step_2 = String::from("");
+        let mut step_3 = String::from("");
+
         let mut group_lagrange_polynomial = Self::one();
-        let mut l_0_s = vec![];
         for (index, evaluation) in group_of_evaluation_points.iter().enumerate() {
+            if index == 0 {
+                step_1 += &format!("{:?}", evaluation);
+            } else {
+                step_1 += &format!(",{:?}", evaluation);
+            }
+            step_2 += &format!("(L_{:?})", evaluation);
             let lagrange_polynomial = Self::get_lagrange_polynomial_for_single(
                 index + 1,
                 evaluation,
                 unique_evaluation_points,
             );
-            l_0_s.push(lagrange_polynomial.clone());
+            step_3 += &format!("({})", lagrange_polynomial.to_latex());
             group_lagrange_polynomial = &group_lagrange_polynomial * &lagrange_polynomial;
         }
-        println!("{:?}", l_0_s);
-        group_lagrange_polynomial
+        step_1 += ")";
+        let step_4 = format!("{}", group_lagrange_polynomial.clone().to_latex());
+        let interpolation_step = InterpolationStep {
+            step_1,
+            step_2,
+            step_3,
+            step_4,
+        };
+        (group_lagrange_polynomial, interpolation_step)
     }
 
     fn get_lagrange_polynomial_for_single(
@@ -588,8 +646,7 @@ impl<F: FiniteFieldElement + Clone + Neg<Output = F> + Sub<Output = F> + Add<Out
         evaluation_points: &BTreeSet<F>,
     ) -> Self {
         let mut resulting_polynomial = MultivariatePoly::one();
-
-        for (_, evaluation_point) in evaluation_points.iter().enumerate() {
+        for evaluation_point in evaluation_points.iter() {
             if current_evaluation_point == evaluation_point {
                 continue;
             }
@@ -605,6 +662,7 @@ impl<F: FiniteFieldElement + Clone + Neg<Output = F> + Sub<Output = F> + Add<Out
                 coefficient: -evaluation_point.clone(),
                 vars: vec![],
             }; // [-c]
+
             let terms = vec![constant_term, term];
             let mut numerator = MultivariatePoly::new(terms);
             let denominator = current_evaluation_point.clone() - evaluation_point.clone();
@@ -693,11 +751,14 @@ impl<F: FiniteFieldElement + Clone + Add<Output = F> + Neg<Output = F> + Sub<Out
 mod tests {
     use num_bigint::BigInt;
 
+    use num_traits::{One, Zero};
     use rand::{thread_rng, Rng};
 
     use crate::ff::{FiniteFieldElement, FFE};
 
     use super::{MultivariatePoly, MultivariatePolynomial, Polynomial, Term, Var};
+
+    use crate::multilinear_poly::BooleanHyperCube;
 
     fn generate_point(num_of_points: usize, modulus: &BigInt) -> Vec<FFE> {
         let mut points = vec![];
@@ -1305,7 +1366,7 @@ mod tests {
 
             let evaluations = generate_point(num_of_points, &modulus);
 
-            let poly = MultivariatePoly::interpolate(&evaluation_points, &evaluations);
+            let (poly, _, _) = MultivariatePoly::interpolate(&evaluation_points, &evaluations);
 
             let evaluation_point = get_evaluation_point(0, &evaluation_points);
             let evaluation = poly.full_evaluation(&evaluation_point);
@@ -1352,7 +1413,7 @@ mod tests {
 
             let evaluations = generate_point(num_of_points, &modulus);
 
-            let poly = MultivariatePoly::interpolate(&evaluation_points, &evaluations);
+            let (poly, _, _) = MultivariatePoly::interpolate(&evaluation_points, &evaluations);
 
             let evaluation_point = get_evaluation_point(0, &evaluation_points);
             let evaluation = poly.full_evaluation(&evaluation_point);
@@ -1441,9 +1502,7 @@ mod tests {
 
             let evaluations = generate_point(num_of_points, &modulus);
 
-            let poly = MultivariatePoly::interpolate(&evaluation_points, &evaluations);
-
-            println!("{:?}", poly);
+            let (poly, _, _) = MultivariatePoly::interpolate(&evaluation_points, &evaluations);
 
             let evaluation_point = get_evaluation_point(0, &evaluation_points);
             let evaluation_1 = poly.full_evaluation(&evaluation_point);
@@ -1475,9 +1534,7 @@ mod tests {
 
             let evaluations = generate_point(num_of_points, &modulus);
 
-            let poly = MultivariatePoly::interpolate(&evaluation_points, &evaluations);
-
-            println!("{:?}", poly);
+            let (poly, _, _) = MultivariatePoly::interpolate(&evaluation_points, &evaluations);
 
             let evaluation_point = get_evaluation_point(0, &evaluation_points);
             let evaluation_1 = poly.full_evaluation(&evaluation_point);
@@ -1518,7 +1575,7 @@ mod tests {
 
             let evaluations = generate_point(num_of_points, &modulus);
 
-            let poly = MultivariatePoly::interpolate(&evaluation_points, &evaluations);
+            let (poly, _, _) = MultivariatePoly::interpolate(&evaluation_points, &evaluations);
 
             let poly_latex = poly.to_latex();
 
@@ -1544,7 +1601,7 @@ mod tests {
 
             let evaluations = generate_point(num_of_points, &modulus);
 
-            let poly = MultivariatePoly::interpolate(&evaluation_points, &evaluations);
+            let (poly, _, _) = MultivariatePoly::interpolate(&evaluation_points, &evaluations);
 
             let poly_latex = poly.to_latex();
 
@@ -1552,5 +1609,79 @@ mod tests {
 
             assert_eq!(poly, poly_from_latex);
         }
+    }
+
+    #[test]
+    fn test_steps() {
+        let modulus = BigInt::from(17);
+        // let num_of_vars = 3;
+
+        // let num_of_points = 8;
+
+        // let mut evaluation_points: Vec<Vec<FFE>> = vec![];
+
+        // let evaluation_points = generate_random_evaluation_points(
+        //     &mut evaluation_points,
+        //     num_of_vars,
+        //     num_of_points,
+        //     &modulus,
+        // );
+
+        // let evaluations = generate_point(num_of_points, &modulus);
+
+        let evaluation_points = vec![
+            vec![
+                FFE::new(&BigInt::zero(), &modulus),
+                FFE::new(&BigInt::zero(), &modulus),
+                FFE::new(&BigInt::zero(), &modulus),
+            ],
+            vec![
+                FFE::new(&BigInt::zero(), &modulus),
+                FFE::new(&BigInt::zero(), &modulus),
+                FFE::new(&BigInt::one(), &modulus),
+            ],
+            vec![
+                FFE::new(&BigInt::zero(), &modulus),
+                FFE::new(&BigInt::one(), &modulus),
+                FFE::new(&BigInt::zero(), &modulus),
+            ],
+            vec![
+                FFE::new(&BigInt::zero(), &modulus),
+                FFE::new(&BigInt::one(), &modulus),
+                FFE::new(&BigInt::one(), &modulus),
+            ],
+            vec![
+                FFE::new(&BigInt::one(), &modulus),
+                FFE::new(&BigInt::zero(), &modulus),
+                FFE::new(&BigInt::zero(), &modulus),
+            ],
+            vec![
+                FFE::new(&BigInt::one(), &modulus),
+                FFE::new(&BigInt::zero(), &modulus),
+                FFE::new(&BigInt::one(), &modulus),
+            ],
+            vec![
+                FFE::new(&BigInt::one(), &modulus),
+                FFE::new(&BigInt::one(), &modulus),
+                FFE::new(&BigInt::zero(), &modulus),
+            ],
+            vec![
+                FFE::new(&BigInt::one(), &modulus),
+                FFE::new(&BigInt::one(), &modulus),
+                FFE::new(&BigInt::one(), &modulus),
+            ],
+        ];
+        let evaluations = vec![
+            FFE::new(&BigInt::from(3), &modulus),
+            FFE::new(&BigInt::from(2), &modulus),
+            FFE::new(&BigInt::from(5), &modulus),
+            FFE::new(&BigInt::from(7), &modulus),
+            FFE::new(&BigInt::from(9), &modulus),
+            FFE::new(&BigInt::zero(), &modulus),
+            FFE::new(&BigInt::zero(), &modulus),
+            FFE::new(&BigInt::zero(), &modulus),
+        ];
+        let (poly, steps, _) = MultivariatePoly::interpolate(&evaluation_points, &evaluations);
+        println!("{:?}", steps);
     }
 }

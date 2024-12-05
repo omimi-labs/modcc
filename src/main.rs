@@ -6,6 +6,7 @@ mod multivariate_view_helpers;
 mod univariate_poly;
 mod univariate_view_helpers;
 
+use multivariate_poly::{Properties, Steps};
 use multivariate_view_helpers::multivariate_interpolate_over_finite_field;
 use univariate_poly::LagrangeInterpolationSteps;
 
@@ -44,11 +45,12 @@ struct MultilinearOverBooleanHypercubeRequest {
     field: usize,
 }
 
-// #[derive(Debug, Serialize)]
-// struct MultilinearOverBooleanHypercubeResponse {
-//     coefficients: Vec<(usize, usize)>,
-//     steps: MultilinearLagrangeInterpolationSteps,
-// }
+#[derive(Debug, Serialize)]
+struct MultilinearOverBooleanHypercubeResponse {
+    poly: String,
+    steps: Steps,
+    properties: Properties,
+}
 
 #[derive(Debug, Deserialize)]
 struct MultivariateInterpolationRequest {
@@ -96,23 +98,24 @@ async fn lagrange_interpolation_over_ff(
     HttpResponse::Ok().json(response)
 }
 
-// #[post("/multilinear_interpolation_over_boolean_hypercube/")]
-// async fn multilinear_interpolation_over_boolean_hypercube(
-//     json: web::Json<MultilinearOverBooleanHypercubeRequest>,
-// ) -> impl Responder {
-//     let y_values = &json.y_values;
-//     let field = json.field;
-//     let (coefficients, steps) =
-//         multilinear_view_helpers::multilinear_interpolate_over_boolean_hypercube(
-//             y_values,
-//             field as u128,
-//         );
-//     let response = MultilinearOverBooleanHypercubeResponse {
-//         coefficients,
-//         steps,
-//     };
-//     HttpResponse::Ok().json(response)
-// }
+#[post("/multilinear_interpolation_over_boolean_hypercube/")]
+async fn multilinear_interpolation_over_boolean_hypercube(
+    json: web::Json<MultilinearOverBooleanHypercubeRequest>,
+) -> impl Responder {
+    let y_values = &json.y_values;
+    let field = json.field;
+    let (poly, steps, properties) =
+        multilinear_view_helpers::multilinear_interpolate_over_boolean_hypercube(
+            y_values,
+            field as u128,
+        );
+    let response = MultilinearOverBooleanHypercubeResponse {
+        poly,
+        steps,
+        properties,
+    };
+    HttpResponse::Ok().json(response)
+}
 
 #[post("/multivariate_interpolation_over_finite_field/")]
 async fn multivariate_interpolation_over_finite_field(
@@ -158,7 +161,7 @@ async fn main() -> std::io::Result<()> {
                     .max_age(3600),
             )
             .service(lagrange_interpolation_over_ff)
-            // .service(multilinear_interpolation_over_boolean_hypercube)
+            .service(multilinear_interpolation_over_boolean_hypercube)
             .service(multivariate_interpolation_over_finite_field)
             .service(evaluate_univariate_poly)
     })

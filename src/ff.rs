@@ -44,7 +44,7 @@ pub trait FiniteFieldElement:
     fn pow(&self, n: u128) -> Self;
 }
 
-#[derive(Clone, Default, PartialEq, Eq, PartialOrd, Ord)]
+#[derive(Clone, Default, PartialOrd, Ord)]
 pub struct FFE {
     element: BigInt,
     modulus: Option<BigInt>,
@@ -56,6 +56,18 @@ impl Debug for FFE {
         Ok(())
     }
 }
+
+impl PartialEq for FFE {
+    fn eq(&self, other: &Self) -> bool {
+        if self.is_zero() && other.is_zero() || self.is_one() && other.is_one() {
+            true
+        } else {
+            self.element == other.element && self.modulus == other.modulus
+        }
+    }
+}
+
+impl Eq for FFE {}
 
 impl FiniteFieldElement for FFE {
     fn new(value: &BigInt, modulus: &BigInt) -> Self {
