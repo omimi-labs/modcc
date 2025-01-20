@@ -1,7 +1,7 @@
 use std::{
     cmp::Ordering,
     collections::BTreeSet,
-    fmt::Debug,
+    fmt::{format, Debug},
     ops::{Add, Mul, Neg, Sub},
 };
 
@@ -370,7 +370,9 @@ pub trait Polynomial<F>: Sized {
 }
 
 pub trait MultivariatePolynomial<F>: Polynomial<F> {
-    fn to_latex(&self) -> String;
+    fn create_latex_lhs(num_of_vars: usize) -> String;
+    fn create_latex_rhs(&self) -> String;
+    fn to_latex(&self, num_of_vars: usize) -> String;
     fn from_latex(latex_string: String, modulus: &BigInt) -> Self;
     fn sort(&mut self);
     fn remove_zeros(&mut self);
@@ -437,7 +439,20 @@ impl<F: FiniteFieldElement + Clone + Add<Output = F>> Polynomial<F> for Multivar
 impl<F: FiniteFieldElement + Clone + Neg<Output = F> + Sub<Output = F> + Add<Output = F>>
     MultivariatePolynomial<F> for MultivariatePoly<F>
 {
-    fn to_latex(&self) -> String {
+    fn create_latex_lhs(num_of_vars: usize) -> String {
+        let mut value = String::from("f(");
+        for i in 0..num_of_vars {
+            if i == num_of_vars - 1 {
+                value += &format!("x_{}", i + 1);
+            } else {
+                value += &format!("x_{},", i + 1);
+            }
+        }
+        value += ")";
+        value
+    }
+
+    fn create_latex_rhs(&self) -> String {
         let mut latex: String;
         if self.is_zero() || self.is_one() || self.is_constant() {
             latex = self.terms[0].to_latex();
@@ -472,8 +487,17 @@ impl<F: FiniteFieldElement + Clone + Neg<Output = F> + Sub<Output = F> + Add<Out
         }
     }
 
+    fn to_latex(&self, num_of_vars: usize) -> String {
+        format!(
+            "${} = {}$",
+            Self::create_latex_lhs(num_of_vars),
+            self.create_latex_rhs(),
+        )
+    }
+
     fn from_latex(latex_string: String, modulus: &BigInt) -> Self {
-        let terms_strs: Vec<&str> = latex_string.split("+").collect();
+        let rhs: Vec<&str> = latex_string.split("=").collect();
+        let terms_strs: Vec<&str> = rhs[1].split("+").collect();
         let trimmed_term_strs: Vec<&str> =
             terms_strs.iter().map(|term_str| term_str.trim()).collect();
         let mut terms = vec![];
@@ -565,6 +589,7 @@ impl<F: FiniteFieldElement + Clone + Neg<Output = F> + Sub<Output = F> + Add<Out
         collection_of_group_of_evaluation_points: &Vec<Vec<F>>,
         y_values: &Vec<F>,
     ) -> (Self, Steps, Properties) {
+        println!("{:?}", collection_of_group_of_evaluation_points);
         let mut interpolation_steps = vec![];
         let mut combination_step = String::from("");
         let mut unique_evaluation_points = BTreeSet::new();
@@ -584,10 +609,14 @@ impl<F: FiniteFieldElement + Clone + Neg<Output = F> + Sub<Output = F> + Add<Out
                 group_of_evaluation_points,
             );
             if i == 0 {
-                combination_step += &format!("{:?}({})", y, group_lagrange_polynomial.to_latex());
-            } else {
                 combination_step +=
-                    &format!(" + {:?}({})", y, group_lagrange_polynomial.to_latex());
+                    &format!("{:?}({})", y, group_lagrange_polynomial.create_latex_rhs());
+            } else {
+                combination_step += &format!(
+                    " + {:?}({})",
+                    y,
+                    group_lagrange_polynomial.create_latex_rhs()
+                );
             }
             interpolation_steps.push(step);
             group_lagrange_polynomial.scalar_mul(y.clone());
@@ -614,6 +643,7 @@ impl<F: FiniteFieldElement + Clone + Neg<Output = F> + Sub<Output = F> + Add<Out
         let mut step_3 = String::from("");
 
         let mut group_lagrange_polynomial = Self::one();
+        let num_of_vars = group_of_evaluation_points.len();
         for (index, evaluation) in group_of_evaluation_points.iter().enumerate() {
             if index == 0 {
                 step_1 += &format!("{:?}", evaluation);
@@ -626,11 +656,11 @@ impl<F: FiniteFieldElement + Clone + Neg<Output = F> + Sub<Output = F> + Add<Out
                 evaluation,
                 unique_evaluation_points,
             );
-            step_3 += &format!("({})", lagrange_polynomial.to_latex());
+            step_3 += &format!("({})", lagrange_polynomial.create_latex_rhs());
             group_lagrange_polynomial = &group_lagrange_polynomial * &lagrange_polynomial;
         }
         step_1 += ")";
-        let step_4 = format!("{}", group_lagrange_polynomial.clone().to_latex());
+        let step_4 = format!("{}", group_lagrange_polynomial.clone().create_latex_rhs());
         let interpolation_step = InterpolationStep {
             step_1,
             step_2,
@@ -1577,7 +1607,7 @@ mod tests {
 
             let (poly, _, _) = MultivariatePoly::interpolate(&evaluation_points, &evaluations);
 
-            let poly_latex = poly.to_latex();
+            let poly_latex = poly.to_latex(num_of_vars);
 
             let poly_from_latex = MultivariatePoly::<FFE>::from_latex(poly_latex, &modulus);
 
@@ -1603,7 +1633,7 @@ mod tests {
 
             let (poly, _, _) = MultivariatePoly::interpolate(&evaluation_points, &evaluations);
 
-            let poly_latex = poly.to_latex();
+            let poly_latex = poly.to_latex(num_of_vars);
 
             let poly_from_latex = MultivariatePoly::<FFE>::from_latex(poly_latex, &modulus);
 

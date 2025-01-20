@@ -3,7 +3,7 @@ use std::ops::{Add, Neg, Sub};
 use std::usize;
 
 use num_bigint::BigInt;
-use num_traits::{One, ToPrimitive, Zero};
+use num_traits::{One, Zero};
 
 use crate::ff::FiniteFieldElement;
 use crate::multivariate_poly::{MultivariatePoly, MultivariatePolynomial, Properties, Steps};
@@ -67,16 +67,11 @@ pub fn create_multilinear_poly<
 >(
     y_values: &Vec<F>,
     field: &BigInt,
+    num_of_vars: usize,
+    num_of_evaluation_points: usize,
 ) -> (MultivariatePoly<F>, Steps, Properties) {
-    let normalized_eval_len = y_values.len().next_power_of_two();
-    let num_of_vars = normalized_eval_len
-        .to_f64()
-        .unwrap()
-        .log2()
-        .to_usize()
-        .unwrap();
     let mut evaluations = y_values.clone();
-    evaluations.resize(normalized_eval_len, F::zero());
+    evaluations.resize(num_of_evaluation_points, F::zero());
     let bit_iterator = BooleanHyperCube::<F>::new(num_of_vars, field);
     let mut group_of_evaluation_points = vec![];
     for (evaluation_points, _) in bit_iterator {
