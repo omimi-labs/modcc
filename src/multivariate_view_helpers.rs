@@ -48,3 +48,31 @@ pub fn multivariate_interpolate_over_finite_field(
         .collect::<Vec<(usize, Vec<_>)>>();
     return Ok(terms);
 }
+
+pub fn multivariate_full_evaluation(
+    evaluation_points: &Vec<(usize, usize)>,
+    poly_string: &String,
+    field: usize,
+) -> String {
+    let poly = MultivariatePoly::<FFE>::from_latex(poly_string.clone(), &BigInt::from(field));
+    let eval_points = evaluation_points
+        .iter()
+        .map(|(i, val)| (*i, FFE::new(&BigInt::from(*val), &BigInt::from(field))))
+        .collect::<Vec<(usize, FFE)>>();
+    let evaluation = poly.full_evaluation(&eval_points);
+    format!("${}$", evaluation.element())
+}
+
+pub fn multivariate_partial_evaluation(
+    evaluation_points: &Vec<(usize, usize)>,
+    poly_string: &String,
+    field: usize,
+) -> String {
+    let poly = MultivariatePoly::<FFE>::from_latex(poly_string.clone(), &BigInt::from(field));
+    let eval_points = evaluation_points
+        .iter()
+        .map(|(i, val)| (*i, FFE::new(&BigInt::from(*val), &BigInt::from(field))))
+        .collect::<Vec<(usize, FFE)>>();
+    let partial_evaluation = poly.partial_evaluation(&eval_points);
+    format!("${}$", partial_evaluation.create_latex_rhs())
+}

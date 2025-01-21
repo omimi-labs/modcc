@@ -1,7 +1,7 @@
 use std::{
     cmp::Ordering,
     collections::BTreeSet,
-    fmt::{format, Debug},
+    fmt::Debug,
     ops::{Add, Mul, Neg, Sub},
 };
 
@@ -643,7 +643,6 @@ impl<F: FiniteFieldElement + Clone + Neg<Output = F> + Sub<Output = F> + Add<Out
         let mut step_3 = String::from("");
 
         let mut group_lagrange_polynomial = Self::one();
-        let num_of_vars = group_of_evaluation_points.len();
         for (index, evaluation) in group_of_evaluation_points.iter().enumerate() {
             if index == 0 {
                 step_1 += &format!("{:?}", evaluation);
