@@ -89,7 +89,9 @@ struct MultivariateInterpolationRequest {
 
 #[derive(Debug, Serialize)]
 struct MultivariateInterpolationResponse {
-    terms: Vec<(usize, Vec<(usize, usize)>)>,
+    poly: String,
+    steps: Steps,
+    properties: Properties,
 }
 
 #[derive(Serialize)]
@@ -172,15 +174,18 @@ async fn multivariate_interpolation_over_finite_field(
     let evaluations_points = &json.evaluation_points;
     let y_values = &json.y_values;
     let field = json.field;
-    let terms = multivariate_interpolate_over_finite_field(
+    let result = multivariate_interpolate_over_finite_field(
         num_of_vars,
         evaluations_points,
         y_values,
         field,
     );
-    if terms.is_ok() {
+    if result.is_ok() {
+        let response = result.unwrap();
         let response = MultivariateInterpolationResponse {
-            terms: terms.unwrap(),
+            poly: response.0,
+            steps: response.1,
+            properties: response.2,
         };
         HttpResponse::Ok().json(response)
     } else {

@@ -1,14 +1,14 @@
 use num_bigint::BigInt;
 
 use crate::ff::{FiniteFieldElement, FFE};
-use crate::multivariate_poly::{MultivariatePoly, MultivariatePolynomial, Polynomial};
+use crate::multivariate_poly::{MultivariatePoly, MultivariatePolynomial, Properties, Steps};
 
 pub fn multivariate_interpolate_over_finite_field(
     num_of_vars: usize,
     evaluation_points: &Vec<Vec<i128>>,
     y_values: &Vec<i128>,
     field: usize,
-) -> Result<Vec<(usize, Vec<(usize, usize)>)>, String> {
+) -> Result<(String, Steps, Properties), String> {
     for group in evaluation_points {
         if group.len() != num_of_vars {
             return Err(String::from("Invalid collection of vars"));
@@ -32,21 +32,9 @@ pub fn multivariate_interpolate_over_finite_field(
             .collect::<Vec<_>>()
         })
         .collect();
-    let (poly, _, _) = MultivariatePoly::interpolate(&group_of_evaluation_points, &new_y_values);
-    let terms = poly
-        .terms()
-        .iter()
-        .map(|term| {
-            (
-                term.coefficient().element().try_into().unwrap(),
-                term.vars()
-                    .iter()
-                    .map(|x| (x.index(), x.power()))
-                    .collect::<Vec<_>>(),
-            )
-        })
-        .collect::<Vec<(usize, Vec<_>)>>();
-    return Ok(terms);
+    let (poly, steps, properties) =
+        MultivariatePoly::interpolate(&group_of_evaluation_points, &new_y_values);
+    Ok((poly.to_latex(num_of_vars), steps, properties))
 }
 
 pub fn multivariate_full_evaluation(

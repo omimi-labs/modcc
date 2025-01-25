@@ -780,14 +780,14 @@ impl<F: FiniteFieldElement + Clone + Add<Output = F> + Neg<Output = F> + Sub<Out
 mod tests {
     use num_bigint::BigInt;
 
+    #[allow(unused_imports)]
     use num_traits::{One, Zero};
     use rand::{thread_rng, Rng};
 
     use crate::ff::{FiniteFieldElement, FFE};
 
+    #[allow(unused_imports)]
     use super::{MultivariatePoly, MultivariatePolynomial, Polynomial, Term, Var};
-
-    use crate::multilinear_poly::BooleanHyperCube;
 
     fn generate_point(num_of_points: usize, modulus: &BigInt) -> Vec<FFE> {
         let mut points = vec![];
