@@ -71,6 +71,7 @@ impl Eq for FFE {}
 
 impl FiniteFieldElement for FFE {
     fn new(value: &BigInt, modulus: &BigInt) -> Self {
+        println!("{:?}, {:?}", value, modulus);
         let field_element = ((value % modulus) + modulus) % modulus;
         Self {
             element: field_element,

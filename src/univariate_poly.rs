@@ -6,6 +6,7 @@ use std::{
 
 use crate::ff::FiniteFieldElement;
 use num_bigint::BigInt;
+use num_traits::{One, Zero};
 use serde::Serialize;
 
 pub trait Polynomial<F>: Sized {
@@ -176,7 +177,10 @@ impl<
                 .map(|x| x.element().try_into().unwrap())
                 .collect(),
         );
-
+        if x_values.len() == 1 {
+            // TODO: Add steps for when this case
+            return (Self::new(y_values.to_vec()), main_steps);
+        }
         let mut resulting_polynomial = Self::zero();
         for (i, (x, y)) in x_values.iter().zip(y_values.iter()).enumerate() {
             let (lagrange_polynomial, steps) = Self::get_lagrange_polynomial(x, &x_values);
@@ -242,7 +246,7 @@ impl<
 
 impl<F: FiniteFieldElement + Clone> UniPoly<F> {
     pub fn from_latex(poly_string: &str, modulus: &BigInt) -> Self {
-        println!("{:?}", poly_string);
+        println!("{}", poly_string);
         let split_string: Vec<_> = poly_string.split("+").collect();
         let trimmed_split_string: Vec<_> = split_string.iter().map(|x| x.trim()).collect();
         let collections_of_terms_and_coefficients: Vec<_> = trimmed_split_string
@@ -293,6 +297,34 @@ impl<F: FiniteFieldElement + Clone> UniPoly<F> {
             }
             return UniPoly::new(coefficients);
         }
+    }
+
+    pub fn to_latex(&self) -> String {
+        let mut latex_string = String::from("f(x) = ");
+        for (i, value) in self.coefficients.iter().rev().enumerate() {
+            if value.is_zero() {
+                continue;
+            }
+            if i == self.coefficients.len() - 1 {
+                latex_string += &format!("{:?}", value);
+            } else {
+                if value.is_one() {
+                    if i == self.coefficients.len() - 2 {
+                        latex_string += &format!("x + ")
+                    } else {
+                        latex_string += &format!("x^{} + ", self.coefficients.len() - 1 - i)
+                    }
+                } else {
+                    if i == self.coefficients.len() - 2 {
+                        latex_string += &format!("{:?}x + ", value)
+                    } else {
+                        latex_string +=
+                            &format!("{:?}x^{} + ", value, self.coefficients.len() - 1 - i)
+                    }
+                }
+            }
+        }
+        format!("${}$", latex_string)
     }
 }
 
@@ -374,6 +406,8 @@ mod tests {
     use crate::ff::FFE;
 
     const MODULUS: u128 = 3221225473;
+
+    use rand::{thread_rng, Rng};
 
     #[test]
     fn mul() {
@@ -461,47 +495,66 @@ mod tests {
         assert_eq!(actual, expected);
     }
 
-    #[test]
-    fn interpolate() {
-        // Interpolating the values: [3, 1, 2, 4]
-        let modulus = BigInt::from(17);
-        let co_effs = vec![
-            FFE::new(&BigInt::from(3), &modulus),
-            FFE::new(&BigInt::from(1), &modulus),
-            FFE::new(&BigInt::from(2), &modulus),
-            FFE::new(&BigInt::from(4), &modulus),
-        ];
-        let (poly, _steps) = UniPoly::<FFE>::interpolate(&co_effs);
-        let exp_co_effs = vec![
-            FFE::new(&BigInt::from(3), &modulus),
-            FFE::new(&BigInt::from(10), &modulus),
-            FFE::new(&BigInt::from(11), &modulus),
-            FFE::new(&BigInt::from(11), &modulus),
-        ];
-        let exp_poly = UniPoly::<FFE>::new(exp_co_effs);
-        assert_eq!(exp_poly, poly);
+    fn generate_x_points(num_of_points: usize, modulus: &BigInt) -> Vec<FFE> {
+        let mut x_points = vec![];
+        let mut rng = thread_rng();
+        while x_points.len() != num_of_points {
+            let x_point: usize = rng.gen();
+            let element = BigInt::from(x_point);
+            let var = FFE::new(&element, modulus);
+            if x_points.contains(&var) {
+                continue;
+            }
+            x_points.push(var);
+        }
+        x_points
     }
 
-    // #[test]
-    // fn test_from_latex() {
-    //     let poly_string = "9x^5 + 8x^4 +x^3 + 12x^2 + 3x + 3";
-    //     let modulus = BigInt::from(17);
-    //     let poly = UniPoly::<FFE>::from_latex(poly_string, &modulus);
-    //     println!("{:?}", poly);
+    fn generate_y_points(num_of_points: usize, modulus: &BigInt) -> Vec<FFE> {
+        let mut y_points = vec![];
+        let mut rng = thread_rng();
+        while y_points.len() != num_of_points {
+            let y_point: usize = rng.gen();
+            let element = BigInt::from(y_point);
+            let var = FFE::new(&element, modulus);
+            y_points.push(var);
+        }
+        y_points
+    }
 
-    //     let poly_string = "9x^5 + x^3 + 3x + 3";
-    //     let modulus = BigInt::from(17);
-    //     let poly = UniPoly::<FFE>::from_latex(poly_string, &modulus);
-    //     println!("{:?}", poly);
+    #[test]
+    fn interpolate() {
+        let modulus = BigInt::from(17);
+        let rounds = 10;
+        for num_of_points in 1..100 {
+            for _ in 0..rounds {
+                let x_values = generate_x_points(num_of_points.try_into().unwrap(), &modulus);
+                let y_values = generate_y_points(num_of_points.try_into().unwrap(), &modulus);
+                let (poly, _) = UniPoly::interpolate_xy(&x_values, &y_values);
+                for (x_value, y_value) in x_values.iter().zip(y_values.iter()) {
+                    let evaluation = poly.evaluate(&x_value);
+                    assert_eq!(evaluation, *y_value)
+                }
+            }
+        }
+    }
 
-    //     let poly_string = "9x^5 + x^3 + 3x";
-    //     let modulus = BigInt::from(17);
-    //     let poly = UniPoly::<FFE>::from_latex(poly_string, &modulus);
-    //     println!("{:?}", poly);
+    #[test]
+    fn latex() {
+        let modulus = BigInt::from(17);
+        let rounds = 10;
+        for num_of_points in 1..100 {
+            for _ in 0..rounds {
+                let x_values = generate_x_points(num_of_points.try_into().unwrap(), &modulus);
+                let y_values = generate_y_points(num_of_points.try_into().unwrap(), &modulus);
+                let (poly, _) = UniPoly::interpolate_xy(&x_values, &y_values);
+                let poly_latex_string = poly.to_latex();
+                let gen_poly = UniPoly::<FFE>::from_latex(&poly_latex_string, &modulus);
+                assert_eq!(poly, gen_poly)
+            }
+        }
+    }
 
-    //     let poly_string = "13x^4 + 9x^3 + 3x^2 + 8x + 3";
-    //     let modulus = BigInt::from(17);
-    //     let poly = UniPoly::<FFE>::from_latex(poly_string, &modulus);
-    //     println!("{:?}", poly);
-    // }
+    #[test]
+    fn test_latex() {}
 }
