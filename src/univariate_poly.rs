@@ -1,5 +1,5 @@
 use std::{
-    collections,
+    fmt::Debug,
     ops::{Add, Mul, Neg, Sub},
     u128,
 };
@@ -36,11 +36,18 @@ pub trait UnivariatePolynomial<F: Default>: Polynomial<F> {
 }
 
 // Univariate Polynomial
-#[derive(Debug, PartialEq, Clone)]
+#[derive(PartialEq, Clone)]
 pub struct UniPoly<F> {
     // Co-efficient represented from lower degree to higher
     // For example: 2x^2 + x + 1 is represented as [1, 1, 2]
     coefficients: Vec<F>,
+}
+
+impl<F: FiniteFieldElement + Clone + Add<Output = F>> Debug for UniPoly<F> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}", self.to_latex())?;
+        Ok(())
+    }
 }
 
 impl<F: FiniteFieldElement> Polynomial<F> for UniPoly<F> {
@@ -246,8 +253,8 @@ impl<
 
 impl<F: FiniteFieldElement + Clone> UniPoly<F> {
     pub fn from_latex(poly_string: &str, modulus: &BigInt) -> Self {
-        println!("{}", poly_string);
-        let split_string: Vec<_> = poly_string.split("+").collect();
+        let poly_string_rhs: Vec<_> = poly_string.trim_matches('$').split("=").collect();
+        let split_string: Vec<_> = poly_string_rhs[1].split("+").collect();
         let trimmed_split_string: Vec<_> = split_string.iter().map(|x| x.trim()).collect();
         let collections_of_terms_and_coefficients: Vec<_> = trimmed_split_string
             .iter()
@@ -258,8 +265,7 @@ impl<F: FiniteFieldElement + Clone> UniPoly<F> {
             let exponent: usize;
             let coefficient: usize;
             if terms.len() == 2 {
-                let second_characters: Vec<_> = terms[1].chars().collect();
-                let exp: usize = second_characters[1].to_string().parse().unwrap();
+                let exp: usize = terms[1].parse().unwrap();
                 exponent = exp;
                 if terms[0] == "x" {
                     coefficient = 1;
@@ -270,11 +276,10 @@ impl<F: FiniteFieldElement + Clone> UniPoly<F> {
             } else {
                 if terms[0].contains("x") {
                     exponent = 1;
-                    let first_characters: Vec<_> = terms[0].chars().collect();
-                    if first_characters.len() == 1 {
+                    if terms[0].trim_end_matches("x") == "" {
                         coefficient = 1;
                     } else {
-                        coefficient = first_characters[0].to_string().parse().unwrap()
+                        coefficient = terms[0].trim_end_matches("x").parse().unwrap()
                     }
                 } else {
                     exponent = 0;
@@ -303,9 +308,10 @@ impl<F: FiniteFieldElement + Clone> UniPoly<F> {
         let mut latex_string = String::from("f(x) = ");
         for (i, value) in self.coefficients.iter().rev().enumerate() {
             if value.is_zero() {
-                continue;
-            }
-            if i == self.coefficients.len() - 1 {
+                if self.coefficients.len() == 1 {
+                    latex_string += "0"
+                }
+            } else if i == self.coefficients.len() - 1 {
                 latex_string += &format!("{:?}", value);
             } else {
                 if value.is_one() {
@@ -324,7 +330,7 @@ impl<F: FiniteFieldElement + Clone> UniPoly<F> {
                 }
             }
         }
-        format!("${}$", latex_string)
+        format!("${}$", latex_string.trim().trim_end_matches("+").trim())
     }
 }
 
@@ -540,7 +546,7 @@ mod tests {
     }
 
     #[test]
-    fn latex() {
+    fn test_latex() {
         let modulus = BigInt::from(17);
         let rounds = 10;
         for num_of_points in 1..100 {
@@ -550,11 +556,13 @@ mod tests {
                 let (poly, _) = UniPoly::interpolate_xy(&x_values, &y_values);
                 let poly_latex_string = poly.to_latex();
                 let gen_poly = UniPoly::<FFE>::from_latex(&poly_latex_string, &modulus);
-                assert_eq!(poly, gen_poly)
+                for (x_value, y_value) in x_values.iter().zip(y_values.iter()) {
+                    let poly_evaluation = poly.evaluate(&x_value);
+                    let gen_poly_evaluation = gen_poly.evaluate(&x_value);
+                    assert_eq!(poly_evaluation, *y_value);
+                    assert_eq!(gen_poly_evaluation, *y_value);
+                }
             }
         }
     }
-
-    #[test]
-    fn test_latex() {}
 }

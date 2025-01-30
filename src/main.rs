@@ -62,7 +62,7 @@ struct LagrangeInterpolationRequest {
 
 #[derive(Debug, Serialize)]
 struct LagrangeInterpolationResponse {
-    coefficients: Vec<u128>,
+    poly: String,
     steps: LagrangeInterpolationSteps,
 }
 
@@ -118,12 +118,9 @@ async fn lagrange_interpolation_over_ff(
     let x_values = &json.x_values;
     let y_values = &json.y_values;
     let field = json.field;
-    let (coefficients, steps) =
+    let (poly, steps) =
         univariate_view_helpers::lagrange_interpolate(x_values, y_values, field as u128);
-    let response = LagrangeInterpolationResponse {
-        coefficients,
-        steps,
-    };
+    let response = LagrangeInterpolationResponse { poly, steps };
     HttpResponse::Ok().json(response)
 }
 
