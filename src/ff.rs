@@ -44,7 +44,7 @@ pub trait FiniteFieldElement:
     fn pow(&self, n: u128) -> Self;
 }
 
-#[derive(Clone, Default, PartialOrd, Ord)]
+#[derive(Hash, Clone, Default, PartialOrd, Ord)]
 pub struct FFE {
     element: BigInt,
     modulus: Option<BigInt>,

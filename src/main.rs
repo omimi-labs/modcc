@@ -118,10 +118,17 @@ async fn lagrange_interpolation_over_ff(
     let x_values = &json.x_values;
     let y_values = &json.y_values;
     let field = json.field;
-    let (poly, steps) =
-        univariate_view_helpers::lagrange_interpolate(x_values, y_values, field as u128);
-    let response = LagrangeInterpolationResponse { poly, steps };
-    HttpResponse::Ok().json(response)
+    let result = univariate_view_helpers::lagrange_interpolate(x_values, y_values, field as u128);
+    if result.is_ok() {
+        let (poly, steps) = result.unwrap();
+        let response = LagrangeInterpolationResponse { poly, steps };
+        HttpResponse::Ok().json(response)
+    } else {
+        let response = BadRequestResponse {
+            detail: result.err().unwrap(),
+        };
+        HttpResponse::BadRequest().json(response)
+    }
 }
 
 #[post("/full_evaluation/")]
